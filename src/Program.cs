@@ -1,4 +1,4 @@
-// ============================================================================
+﻿// ============================================================================
 //  饼饼专属中英互译 · Program.cs（Program）
 //  程序入口与自检：Main()（含命令行参数分发）、界面自检、截图自检、控件树审计。
 //  Main 仍写在 QueryForm 分部类里，这样它调用静态成员不用加类名前缀，逻辑零改动。
@@ -32,7 +32,7 @@ using System.Windows.Forms;
 [assembly: System.Reflection.AssemblyDescription("饼饼专属中英互译（速查助手）")]
 [assembly: System.Reflection.AssemblyVersion("1.0.0.0")]
 [assembly: System.Reflection.AssemblyFileVersion("1.0.0.0")]
-[assembly: System.Reflection.AssemblyInformationalVersion("2.9.0")]
+[assembly: System.Reflection.AssemblyInformationalVersion("1.0.0")]
 
 partial class QueryForm : Form   // 基类只在这里声明一次，其余 5 个文件写字面上不带基类
 {
@@ -1025,7 +1025,7 @@ partial class QueryForm : Form   // 基类只在这里声明一次，其余 5 �
                 using (Form f = qf.BuildApiKeyForm(true))
                 {
                     f.StartPosition = FormStartPosition.Manual;
-                    f.Location = new Point(700, 200);   // v2.9.0：窗变高了，往上挪才截得全
+                    f.Location = new Point(700, 200);   // v1.0.0：窗变高了，往上挪才截得全
                     f.TopMost = true;
                     f.Show();
                     f.Activate();
@@ -1066,9 +1066,9 @@ partial class QueryForm : Form   // 基类只在这里声明一次，其余 5 �
             gchk("文字块不互相压住", geoOv.Length == 0, geoOv);
             gchk("托盘菜单里有「配置 API Key」入口", qf.TrayMenuText().Contains("配置 API Key"), "");
 
-            // ===== v2.9.0：地址和模型名不再写死，能不能配成别家？=====
+            // ===== v1.0.0：地址和模型名不再写死，能不能配成别家？=====
             gb.AppendLine();
-            gb.AppendLine("-- v2.9.0 换服务商：地址 / 模型名可配 --");
+            gb.AppendLine("-- v1.0.0 换服务商：地址 / 模型名可配 --");
             gchk("窗里有「服务地址」输入框", shownKey.Contains("[服务地址输入]"), "");
             gchk("窗里有「模型名」输入框", shownKey.Contains("[模型名输入]"), "");
             gchk("窗里说明了留空就是 DeepSeek 官方", shownKey.Contains("留空"), "");

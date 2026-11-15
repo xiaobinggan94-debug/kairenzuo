@@ -1,4 +1,4 @@
-// ApiKeySetup.cs —— v2.5.9 第一档 ①：首启填 Key 小窗（不用再手工建文件）
+﻿// ApiKeySetup.cs —— v2.5.9 第一档 ①：首启填 Key 小窗（不用再手工建文件）
 //
 // 改之前：程序发现没有 apikey.txt，只会在正文里写「先去这个文件夹、新建文件、改扩展名、粘一行」
 //         四步说明。对不熟电脑的人来说，找 %APPDATA% 再改扩展名，比翻译本身还难。
@@ -69,7 +69,7 @@ partial class QueryForm
         if (status == 429) return "对方的服务器说「问得太频繁」，等一分钟再试";
         if (status >= 500) return "对方服务器忙（不是你的问题），过一会儿再试";
         if (status == 0) return "连不上网（先确认电脑能上网；挂着代理的话看是不是代理的事）";
-        // v2.9.0：换了服务商之后 400 十有八九是模型名不对（地址通了、Key 也认，就是没有这个模型）。
+        // v1.0.0：换了服务商之后 400 十有八九是模型名不对（地址通了、Key 也认，就是没有这个模型）。
         // 404 同理——地址少写一段或者多写一段，入口根本没落在 /v1 上。
         if (status == 400 || status == 404
             || b.IndexOf("model") >= 0 && (b.IndexOf("not exist") >= 0 || b.IndexOf("not found") >= 0 || b.IndexOf("invalid") >= 0))
@@ -84,10 +84,10 @@ partial class QueryForm
         return TestApiKeyOnline(key, "", "");
     }
 
-    // v2.9.0：测的必须是「窗里这一刻填的」地址和模型，而不是已经存好的那份。
+    // v1.0.0：测的必须是「窗里这一刻填的」地址和模型，而不是已经存好的那份。
     // 不然刚填好别家地址点「测一下」，它还在拿 DeepSeek 的门口试，怎么都是 401。
     // 两个 override 传空 = 用 ini 里存好的（再空就是 DeepSeek 官方那套）。
-    // v2.9.0：出网络异常时留一句原始原因（只给自检和日志看，界面上还是说人话）
+    // v1.0.0：出网络异常时留一句原始原因（只给自检和日志看，界面上还是说人话）
     internal static string LastTestError = "";
 
     internal static string TestApiKeyOnline(string key, string baseOverride, string modelOverride)
@@ -103,7 +103,7 @@ partial class QueryForm
             byte[] data = Encoding.UTF8.GetBytes(body);
             HttpWebRequest req = CreateJsonPost(apiBase + "/chat/completions", key, data);
             req.Timeout = 15000;
-            // v2.9.0 修：以前这里只标了 ContentLength，却从来没把正文写出去，
+            // v1.0.0 修：以前这里只标了 ContentLength，却从来没把正文写出去，
             // 结果「测一下」每次都抛 ProtocolViolationException，界面上显示成"连不上网"。
             using (Stream up = req.GetRequestStream()) up.Write(data, 0, data.Length);
             using (HttpWebResponse resp = (HttpWebResponse)req.GetResponse())
@@ -183,8 +183,8 @@ partial class QueryForm
     {
         float dpiScale = 1f;
         internal TextBox Box;
-        internal TextBox BoxBase;    // v2.9.0：服务地址（留空 = DeepSeek 官方）
-        internal TextBox BoxModel;   // v2.9.0：模型名（留空 = deepseek-flash）
+        internal TextBox BoxBase;    // v1.0.0：服务地址（留空 = DeepSeek 官方）
+        internal TextBox BoxModel;   // v1.0.0：模型名（留空 = deepseek-flash）
         internal Label Status;
         RoundButton BtnTest;
         RoundButton BtnSave;
@@ -315,7 +315,7 @@ partial class QueryForm
             Label pathLb = AddWrap("存在：" + ApiKeyFile, 20, y, 420, 8f, false, Pal.InkFaint);
             y = pathLb.Bottom + S(8);
 
-            // ---- v2.9.0 换服务商（可选）：留空 = DeepSeek 官方；不换的人这段当没看过 ----
+            // ---- v1.0.0 换服务商（可选）：留空 = DeepSeek 官方；不换的人这段当没看过 ----
             Panel hairSvc = new Panel();
             hairSvc.BackColor = Pal.Hair;
             hairSvc.Location = new Point(0, S(y));
@@ -390,7 +390,7 @@ partial class QueryForm
                 }
                 BtnTest.Enabled = false;
                 Say("正在试…（最多等 15 秒）", false);
-                // v2.9.0：拿框里这一刻的地址/模型去试，不是存过的那份
+                // v1.0.0：拿框里这一刻的地址/模型去试，不是存过的那份
                 string bTest = (BoxBase.Text ?? "").Trim();
                 string mTest = (BoxModel.Text ?? "").Trim();
                 Thread t = new Thread(delegate ()
@@ -428,7 +428,7 @@ partial class QueryForm
                     Box.Focus();
                     return;
                 }
-                // v2.9.0：地址和模型一起存进 settings.ini。留空也照存（空就是恢复默认），
+                // v1.0.0：地址和模型一起存进 settings.ini。留空也照存（空就是恢复默认），
                 // 清了框点保存就等于退回 DeepSeek 官方，不用手改文件。
                 if (!selfTestMode)
                 {

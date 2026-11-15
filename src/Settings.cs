@@ -159,7 +159,7 @@ partial class QueryForm
         d["voice_lang"] = "zh";
         // 第三批 ②：查询热键可换，默认还是老的 Ctrl+空格，老用户升级上来感觉不到变化
         d["hotkey"] = "ctrl+space";
-        // v2.9.0：服务商可换。这两项留空 = 还是 DeepSeek 官方 + deepseek-flash，
+        // v1.0.0：服务商可换。这两项留空 = 还是 DeepSeek 官方 + deepseek-flash，
         // 什么都不知道的用户一个字都不用填；想换别家（Kimi / 通义 / 智谱 / 硅基流动 /
         // OpenRouter …）就在「填 API Key」窗里填或者在 ini 里改这两行。
         d["api_base"] = "";

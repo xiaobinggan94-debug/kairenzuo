@@ -28,7 +28,7 @@ using System.Windows.Forms;
 partial class QueryForm
 {
     // ========================================================================
-    //  v2.9.0：地址和模型名不再写死在代码里
+    //  v1.0.0：地址和模型名不再写死在代码里
     //  以前这两行是常量，别家（Kimi / 通义 / 智谱 / 硅基流动 / OpenRouter …）的 Key
     //  填进来照样被发去 DeepSeek 的服务器，只能 401。现在改成读 settings.ini：
     //      api_base=https://api.moonshot.cn/v1
@@ -330,7 +330,7 @@ partial class QueryForm
         }
     }
 
-    // v2.9.0：原来的 const MODEL 已上移到文件顶部（跟 API_BASE 放一起，统一从 settings.ini 读）
+    // v1.0.0：原来的 const MODEL 已上移到文件顶部（跟 API_BASE 放一起，统一从 settings.ini 读）
 
 
     void EnsureTts()

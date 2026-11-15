@@ -1,5 +1,5 @@
 ﻿// ============================================================================
-//  翻译器 · Translate.cs（Translate）
+//  饼饼专属中英互译 · Translate.cs（Translate）
 //  联网翻译与语音：DeepSeek 接口调用、SSE 流式解析、请求体拼装、TTS 朗读、截图 OCR。
 //  所有「出网、出声、认字」的代码都在这个文件里。
 //  ---------------------------------------------------------------------------
@@ -27,7 +27,55 @@ using System.Windows.Forms;
 
 partial class QueryForm
 {
-    const string API_BASE = "https://api.deepseek.com/v1";
+    // ========================================================================
+    //  v2.9.0：地址和模型名不再写死在代码里
+    //  以前这两行是常量，别家（Kimi / 通义 / 智谱 / 硅基流动 / OpenRouter …）的 Key
+    //  填进来照样被发去 DeepSeek 的服务器，只能 401。现在改成读 settings.ini：
+    //      api_base=https://api.moonshot.cn/v1
+    //      api_model=kimi-k2-0905-preview
+    //  留空就是原来那套（DeepSeek 官方 + deepseek-flash），老用户升级上来什么都不用动。
+    //  名字还叫 API_BASE / MODEL，是为了不动散在四处（翻译、多语、第 2 步、填 Key 窗）
+    //  的调用点——它们一个字符都不用改。
+    // ========================================================================
+    const string DEFAULT_API_BASE = "https://api.deepseek.com/v1";
+    const string DEFAULT_MODEL = "deepseek-flash";
+
+    static string API_BASE { get { return ResolveApiBase(GetSet("api_base", "")); } }
+    static string MODEL { get { return ResolveApiModel(GetSet("api_model", "")); } }
+
+    // 地址容错：没写协议自动补 https；末尾斜杠去掉；
+    // 有人会把整条 .../chat/completions 粘进来，尾巴切掉，否则拼成两遍必然 404。
+    internal static string ResolveApiBase(string raw)
+    {
+        string v = (raw == null) ? "" : raw.Replace("\uFEFF", "").Trim().Trim('"', '\'', ' ');
+        if (v.Length == 0) return DEFAULT_API_BASE;
+        if (!v.StartsWith("http://", StringComparison.OrdinalIgnoreCase)
+            && !v.StartsWith("https://", StringComparison.OrdinalIgnoreCase))
+            v = "https://" + v;
+        v = v.TrimEnd('/');
+        string tail = "/chat/completions";
+        if (v.EndsWith(tail, StringComparison.OrdinalIgnoreCase))
+            v = v.Substring(0, v.Length - tail.Length).TrimEnd('/');
+        if (v.Length == 0) return DEFAULT_API_BASE;
+        return v;
+    }
+
+    // 模型名容错：只在前后带引号/空格时才洗，名字内部一个字符都不碰（有的带 / 和 :）
+    internal static string ResolveApiModel(string raw)
+    {
+        string v = (raw == null) ? "" : raw.Replace("\uFEFF", "").Trim().Trim('"', '\'', ' ');
+        return v.Length == 0 ? DEFAULT_MODEL : v;
+    }
+
+    // 自检和「测一下」用：看到的是「现在真正会拿去发请求的那一份」
+    internal static string ApiBaseNow() { return API_BASE; }
+    internal static string ApiModelNow() { return MODEL; }
+    // 自检专用：只改内存不落盘，考完自己清空，绝不碰你真实的 settings.ini
+    internal static void SetApiProviderQuiet(string b, string m)
+    {
+        SetSetQuiet("api_base", b == null ? "" : b);
+        SetSetQuiet("api_model", m == null ? "" : m);
+    }
 
     // ------------------------------------------------------------------------
     //  代理分流（v2.1 F2）
@@ -282,7 +330,8 @@ partial class QueryForm
         }
     }
 
-    const string MODEL = "deepseek-flash";
+    // v2.9.0：原来的 const MODEL 已上移到文件顶部（跟 API_BASE 放一起，统一从 settings.ini 读）
+
 
     void EnsureTts()
     {
@@ -776,7 +825,7 @@ partial class QueryForm
 
     // ====== ④ 报错说人话 ======
     // 以前出错直接把 "远程服务器返回错误: (401) 未经授权。" 这种原文甩在框里，
-    // 用户英语是入门水平，看到这个只能干瞪眼。这里按关键词归成 8 类常见原因，
+    // 饼饼英语是小学水平，看到这个只能干瞪眼。这里按关键词归成 8 类常见原因，
     // 每类给一句「怎么回事 + 怎么办」，原始报错仍然附在最后，方便排查时对照。
     internal static string HumanizeError(string raw)
     {

@@ -1,5 +1,5 @@
 ﻿// ============================================================================
-//  翻译器 · MainForm.cs（MainForm）
+//  饼饼专属中英互译 · MainForm.cs（MainForm）
 //  主窗体：窗口骨架、标题条、自绘控件、自适应布局、拖动/缩放、右键菜单、各类弹窗。
 //  所有「看得见、点得到」的代码都在这个文件里。
 //  ---------------------------------------------------------------------------
@@ -474,7 +474,7 @@ partial class QueryForm
 
         // ====== ④ 出错专用的一条：右边一个「再试一次」（平时隐藏，正常态布局零影响）======
         // 加在 inputBar 之前：两者都是 Dock=Bottom，先加的贴底，所以 errBar 正好落在
-        // 「正文框下方、输入框上方」，就是看结果的那个位置。
+        // 「正文框下方、输入框上方」，就是饼饼看结果的那个位置。
         errBar = new Panel();
         errBar.Dock = DockStyle.Bottom;
         errBar.Height = S(42);
@@ -2821,7 +2821,7 @@ partial class QueryForm
     // ====== v2.5.2：单实例——把已经开着的那个窗口叫出来 ======
     // 用户第二次双击 exe 时，真正想要的是"窗口出现"，而不是一句"程序已经开着了"。
     // 这里只做三件事：找到它的窗口 → 让它自己 ShowPanel（认消息的新版）→ 不行就外部强制显示。
-    internal const string APP_TITLE = "翻译器";
+    internal const string APP_TITLE = "饼饼专属中英互译";
     // 自定义唤起消息：同一个系统内同名消息 ID 一致，新旧版本都注册同一个名字。
     static readonly uint WM_SHOWME = RegisterWindowMessageW("SolivineQuickLook_ShowMe_v252");
 
@@ -3886,7 +3886,7 @@ partial class QueryForm
             string ver = APP_VER;
             string stamp = AppStamp();
             string rev = SrcRev();
-            string repo = "https://github.com/xiaobinggan94-debug/kairenzuo";
+            string repo = "https://github.com/xiaobinggan94-debug/solivine-quicklook";
             string dataDir = LOG_DIR;
 
             InfoBlock = AppTitle + " v" + ver + "\r\n" +

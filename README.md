@@ -10,6 +10,8 @@ Windows 桌面中英互译小工具。按 `Ctrl + 空格` 唤出小窗，输入�
 
 到 [Releases](https://github.com/xiaobinggan94-debug/kairenzuo/releases/latest) 下载 `translator-1.0.0.exe`（程序窗口里显示的软件名是「翻译器」），双击即开。**Key 要自己弄一个**：去 [platform.deepseek.com](https://platform.deepseek.com) 注册，充点钱（按用量计费，充十几块能用挺久），在 API keys 页面新建一个，复制粘进程序首次运行的小窗就行。Key 只存你自己电脑上，不外传。
 
+不一定非得 DeepSeek：凡是接口兼容 OpenAI 的服务商都能用，Kimi（moonshot）、通义（dashscope 兼容模式）、智谱、硅基流动、OpenRouter 这些填进来就能跑。填 Key 那个窗里除了 Key，还有「地址」和「模型名」两格，照对方文档填，填完先点「测一下」，通了再保存；两格都留空就是 DeepSeek 官方那套。
+
 - 用法细节看 [使用说明.md](使用说明.md)；想自己编译看 [docs/BUILD.md](docs/BUILD.md)，一条命令的事
 - 被杀软拦了怎么办：exe 没有代码签名，Defender / SmartScreen 误判这种独立小程序很常见，不是中毒。处理：Windows 安全中心 → 保护历史记录 → 找到那条 → 还原，并「允许在设备上」；或把文件哈希和 Release 里公布的值对一下；最彻底的是自己用 `tools\build.ps1` 编一遍，源码全在仓库里
 

@@ -1,5 +1,5 @@
 ﻿// ============================================================================
-//  翻译器 · CacheStore.cs（CacheStore）
+//  饼饼专属中英互译 · CacheStore.cs（CacheStore）
 //  本地数据：结果缓存、历史记录、生词本的读写与导出。
 //  %APPDATA%\SolivineQuickLook\ 下的文件都由这个文件负责。
 //  ---------------------------------------------------------------------------
@@ -201,7 +201,7 @@ partial class QueryForm
                     }
             }
             StringBuilder sb = new StringBuilder();
-            sb.AppendLine("生词本　（自动去重，按日期分组，同一个词只出现一次）");
+            sb.AppendLine("饼饼的生词本　（自动去重，按日期分组，同一个词只出现一次）");
             sb.AppendLine("整理时间：" + DateTime.Now.ToString("yyyy-MM-dd HH:mm"));
             sb.AppendLine();
             List<string> dates = new List<string>();

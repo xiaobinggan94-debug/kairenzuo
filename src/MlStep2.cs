@@ -1885,7 +1885,7 @@ partial class QueryForm
     // ======================== ⑦ 首次打开小窗：只提示一次 ========================
     // 需求：第一次打开时说清楚三件事（只做纯文本翻译 / 能拖出主窗 / 支持导出），
     // 记进配置后不再重复。提示占一行，所以措辞压到一句里，别把标签撑爆。
-    internal const string MlFirstTipText = "纯文本翻译专用｜可以拖出主窗单独放｜译文能导出 TXT / docx";
+    internal const string MlFirstTipText = "纯文本翻译｜可拖出主窗｜四边能拉大｜译文能导出 TXT / docx";
 
     void MlFirstTipIfNeeded()
     {
@@ -1957,4 +1957,28 @@ partial class QueryForm
         }
     }
     internal string MlMainInputForTest { get { return inputBox == null ? "" : inputBox.Text; } }
+
+    // ---------- v2.4 小窗可缩放：自检门 ----------
+    internal Size MlMinSizeForTest { get { return MlMinSize(); } }
+    internal int MlOutBoxHeightForTest { get { return mlOutBox == null ? -1 : mlOutBox.Box.Height; } }
+    internal int MlInBoxHeightForTest { get { return mlInBox == null ? -1 : mlInBox.Box.Height; } }
+    internal Size MlSavedSizeForTest { get { return MlSavedSize(); } }
+    internal void MlTestToggleMax() { MlToggleMax(); }
+    // 底栏那几个按钮拉大拉小之后还在窗口里吗（越界就是排版没跟上）
+    internal bool MlFootInsideForTest
+    {
+        get
+        {
+            if (mlPanel == null) return false;
+            Control[] all = new Control[] { mlSrcBox, mlDstBox, mlGoBtn, mlCopyBtn, mlCloseBtn, mlTxtBtn, mlDocxBtn, mlWithSrcChk, mlTipLbl };
+            int w = mlPanel.ClientSize.Width, h = mlPanel.ClientSize.Height;
+            foreach (Control c in all)
+            {
+                if (c == null || !c.Visible) continue;
+                if (c.Right > w + 2) return false;
+                if (c.Bottom > h + 2) return false;
+            }
+            return true;
+        }
+    }
 }

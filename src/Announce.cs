@@ -164,7 +164,9 @@ partial class QueryForm
             return b;
         }
 
-        void AddText(string text, int x, int y, int w, int h, float size, bool bold, Color color)
+        // 文字按宽度自己换行、高度量出来给多少算多少，调用方用返回的 Bottom 往下排；
+        // 老写法固定高度会把长句尾巴切掉（用户只能看到半句话）。
+        Label AddFlow(string text, int x, int y, int w, float size, bool bold, Color color)
         {
             Label lb = new Label();
             lb.Text = text;
@@ -172,9 +174,14 @@ partial class QueryForm
             lb.ForeColor = color;
             lb.AutoSize = false;
             lb.TextAlign = ContentAlignment.TopLeft;
+            lb.UseMnemonic = false;
             lb.Location = new Point(S(x), S(y));
-            lb.Size = new Size(S(w), S(h));
+            int wpx = S(w);
+            Size need = TextRenderer.MeasureText(text, lb.Font, new Size(wpx, 4000),
+                TextFormatFlags.WordBreak | TextFormatFlags.TextBoxControl | TextFormatFlags.NoPadding);
+            lb.Size = new Size(wpx, Math.Max(need.Height + S(4), S(18)));
             Controls.Add(lb);
+            return lb;
         }
 
         public AnnounceForm(string title, string body, string filePath)
@@ -202,14 +209,18 @@ partial class QueryForm
             Font = new Font("Microsoft YaHei UI", 9.5f);
             ClientSize = new Size(S(460), S(376));
 
-            AddText(title, 20, 14, 420, 26, 12.5f, true, Pal.Ink);
-            AddText("改这个小文件就能换内容：公告.txt（双击下面「打开公告文件」也行）", 20, 42, 420, 20, 8.5f, false, Pal.InkMuted);
+            // 标题和那行说明都改成按内容量高，正文框保持固定高度（它自己有滚动条），
+            // 后面所有控件接在正文框底下往下排。
+            int y = 14;
+            y = AddFlow(title, 20, y, 420, 12.5f, true, Pal.Ink).Bottom + S(4);
+            y = AddFlow("改这个小文件就能换内容：公告.txt（双击下面「打开公告文件」也行）", 20, y, 420, 8.5f, false, Pal.InkMuted).Bottom + S(10);
 
             Panel hair1 = new Panel();
             hair1.BackColor = Pal.Hair;
-            hair1.Location = new Point(0, S(68));
+            hair1.Location = new Point(0, S(y));
             hair1.Size = new Size(S(460), S(1));
             Controls.Add(hair1);
+            y += S(1) + S(10);
 
             RichTextBox tb = new RichTextBox();
             tb.Text = body;
@@ -219,19 +230,21 @@ partial class QueryForm
             tb.ForeColor = Pal.InkSecondary;
             tb.Font = new Font("Microsoft YaHei UI", 9.5f);
             tb.ScrollBars = RichTextBoxScrollBars.Vertical;
-            tb.Location = new Point(S(20), S(78));
+            tb.Location = new Point(S(20), S(y));
             tb.Size = new Size(S(420), S(206));
             tb.Tag = "公告正文";
             Controls.Add(tb);
+            y = tb.Bottom + S(12);
 
             Panel hair2 = new Panel();
             hair2.BackColor = Pal.Hair;
-            hair2.Location = new Point(0, S(296));
+            hair2.Location = new Point(0, S(y));
             hair2.Size = new Size(S(460), S(1));
             Controls.Add(hair2);
+            y += S(1) + S(14);
 
             RoundButton btnFile = MakeBtn("打开公告文件", 118, false);
-            btnFile.Location = new Point(S(20), S(310));
+            btnFile.Location = new Point(S(20), S(y));
             btnFile.Click += delegate
             {
                 try
@@ -244,9 +257,12 @@ partial class QueryForm
             Controls.Add(btnFile);
 
             RoundButton ok = MakeBtn("知道了", 80, true);
-            ok.Location = new Point(S(360), S(310));
+            ok.Location = new Point(S(360), S(y));
             ok.DialogResult = DialogResult.OK;
             Controls.Add(ok);
+            y = ok.Bottom + S(16);
+
+            ClientSize = new Size(S(460), S(y));
 
             AcceptButton = ok;
             CancelButton = ok;

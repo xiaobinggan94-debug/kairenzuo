@@ -171,6 +171,12 @@ partial class QueryForm
     bool mlOwnerHooked;   // 主窗的"最小化/隐藏/关闭"事件只挂一次
     bool mlWantOpen;      // 用户希望小窗开着：主窗临时最小化时先收起来，回来后照原意复原
 
+    // 小窗能自己拉大小之后：量过的按钮宽度别再每帧重量，拉一次记一次
+    bool _mlMeasured;
+    int _mlHomeW, _mlGoW, _mlCopyW, _mlTxtW, _mlDocxW, _mlChkW;
+    Size _mlRestoreSize;  // 双击标题行铺满工作区之前的那一档大小
+    int _mlMaxTick;
+
     int MlNextSeq() { return Interlocked.Increment(ref mlSeqCounter); }
     bool MlIsCurrent(int seq) { return seq != 0 && seq == mlSeqCounter; }
 
@@ -261,16 +267,30 @@ partial class QueryForm
         mlPanel.Name = "mlPanel";
         mlPanel.BackColor = Pal.Surface;
         mlPanel.TitleHeight = S(42);                   // 标题行整块都能拖，不用对准小把手
+        // v2.4：四边四角都能拉。以前窗口尺寸是写死的 560×430，翻日韩法德那些长句子
+        // 只能在 430 高里面滚，看两行歇一下；现在拉到多大就多大，下次打开还是那么大。
+        mlPanel.GripPx = Math.Max(4, S(6));
+        mlPanel.MinimumSize = new Size(S(380), S(330));  // 地板：再小按钮就要叠起来了
         mlPanel.Paint += delegate (object s, PaintEventArgs e) { MlPanelPaint(e.Graphics); };
         mlPanel.Resize += delegate {
             if (mlPanel.ClientSize.Width > 8 && mlPanel.ClientSize.Height > 8)
             {
                 RoundControl(mlPanel, S(12));
+                // 拖边时每帧都会进来：只走轻量排版，别在这里量文字、改字体
+                if (mlPanel.Sizing) { MlLayoutLite(); return; }
                 MlLayout();
             }
         };
         mlPanel.EscPressed = delegate { HideMultilingual(); };      // 小窗里有焦点时 Esc 也能收
-        mlPanel.DragEnded = delegate { MlSavePos(); };              // 松手才写盘，拖动过程一次都不写
+        // 松手才写盘，拖动过程一次都不写；顺手补一次完整排版，把拖动中省下的字体与测量一次对齐
+        // 注意：补排版走 BeginInvoke 排队，不在 WM_EXITSIZEMOVE 的栈里同步排——
+        // 排版会改一堆控件尺寸，同步排容易跟 Resize 打回声，一层层套到底把进程套死。
+        mlPanel.DragEnded = delegate {
+            MlSavePos();
+            try { mlPanel.BeginInvoke((MethodInvoker)delegate { MlLayout(); }); }
+            catch { MlLayout(); }
+        };
+        mlPanel.TitleDoubleClicked = delegate { MlToggleMax(); };   // 双击标题行 = 铺满 / 还原
         // 注意：这里不再 Controls.Add(mlPanel)——它是顶层窗口，不是主窗的子控件
 
         mlTitle = new Label();
@@ -282,6 +302,7 @@ partial class QueryForm
         mlTitle.Cursor = Cursors.SizeAll;
         // 标题文字上按下也能拖：Label 是子窗口，系统不会把它当标题栏，得自己转一次
         mlTitle.MouseDown += delegate (object s, MouseEventArgs e) { MlDragByCaption(e); };
+        mlTitle.DoubleClick += delegate { MlToggleMax(); };   // 标题文字上双击也认（MlToggleMax 里自带防抖）
         mlPanel.Controls.Add(mlTitle);
 
         mlHomeLink = new LinkLabel();
@@ -416,6 +437,15 @@ partial class QueryForm
             c.Items.Add(l.Name);
         }
         c.SelectedIndexChanged += delegate { MlSavePair(); };
+        // 拖动 / 缩放小窗时窗口会被重新激活，WinForms 把焦点还给可编辑下拉框时默认「全选」里面的文字，
+        // 于是「自动识别」「中文」两格整段变蓝，看着像被选中了。这里拿到焦点就把选择取消、光标停到末尾，
+        // 失焦时也清一次——否则那个全选状态会一直留着，下次一激活又蓝。
+        c.GotFocus += delegate
+        {
+            try { c.SelectionLength = 0; c.SelectionStart = c.Text.Length; } catch { }
+        };
+        c.LostFocus += delegate { try { c.SelectionLength = 0; } catch { } };
+        c.MouseDown += delegate { try { c.SelectionLength = 0; } catch { } };
         return c;
     }
 
@@ -434,12 +464,29 @@ partial class QueryForm
 
     // ---------- 摆位（独立小窗：屏幕坐标 + 位置记忆 + 边界钳制） ----------
 
-    // 小窗的理想尺寸：按固定尺寸开（不再跟着主窗缩），屏幕实在装不下才退一点
+    // 小窗默认尺寸：没存过尺寸时按这个开（不再跟着主窗缩），屏幕实在装不下才退一点
     Size MlIdealSize()
     {
         Rectangle wa = Screen.FromPoint(MlAnchorPoint()).WorkingArea;
         int w = Math.Min(S(560), Math.Max(S(300), wa.Width - S(48)));
-        int h = Math.Min(S(430), Math.Max(S(240), wa.Height - S(72)));
+        int h = Math.Min(S(470), Math.Max(S(240), wa.Height - S(72)));
+        return new Size(w, h);
+    }
+
+    // 小窗的最小尺寸：再小底栏那两行就叠成一团了
+    Size MlMinSize() { return new Size(S(380), S(330)); }
+
+    // 用户自己拉过的大小就是他要的大小：下次照这个开。
+    // 没存过 → 用默认尺寸；存过但屏幕变小了 → 钳进工作区，绝不把窗口开到屏幕外面去。
+    Size MlSavedSize()
+    {
+        int sw = GetInt("ml_w", int.MinValue);
+        int sh = GetInt("ml_h", int.MinValue);
+        if (sw == int.MinValue || sh == int.MinValue || sw < 80 || sh < 80) return MlIdealSize();
+        Rectangle wa = Screen.FromPoint(MlAnchorPoint()).WorkingArea;
+        Size min = MlMinSize();
+        int w = Math.Max(min.Width, Math.Min(sw, wa.Width));
+        int h = Math.Max(min.Height, Math.Min(sh, wa.Height));
         return new Size(w, h);
     }
 
@@ -474,7 +521,7 @@ partial class QueryForm
     void MlPlaceOnOpen()
     {
         if (mlPanel == null) return;
-        Size sz = MlIdealSize();
+        Size sz = MlSavedSize();
         int sx = GetInt("ml_x", int.MinValue);
         int sy = GetInt("ml_y", int.MinValue);
         Point p = (sx == int.MinValue || sy == int.MinValue) ? MlCenterOverMain(sz) : new Point(sx, sy);
@@ -490,13 +537,46 @@ partial class QueryForm
         if (p != mlPanel.Location) { mlPanel.Location = p; MlSavePos(); }
     }
 
-    // 位置落盘：只在打开/收起/拖完手这几处写，拖动过程中一个像素都不写
+    // 位置 + 尺寸落盘：只在打开/收起/拖完手这几处写，拖动过程中一个像素都不写
     void MlSavePos()
     {
         if (mlPanel == null) return;
         SetSetQuiet("ml_x", mlPanel.Left.ToString());
         SetSetQuiet("ml_y", mlPanel.Top.ToString());
+        SetSetQuiet("ml_w", mlPanel.Width.ToString());
+        SetSetQuiet("ml_h", mlPanel.Height.ToString());
         FlushSettings();
+    }
+
+    // 双击标题行：铺满当前屏幕工作区 ↔ 回到上一档大小。
+    // 系统对无边框窗不会自己做「最大化」，这活儿只能我们手动摆。
+    void MlToggleMax()
+    {
+        if (mlPanel == null) return;
+        int now = Environment.TickCount;
+        if (now - _mlMaxTick < 250) return;     // NC 双击和 Label 双击可能各报一次，别来回翻
+        _mlMaxTick = now;
+
+        Rectangle wa = Screen.FromRectangle(mlPanel.Bounds).WorkingArea;
+        Size cur = mlPanel.Size;
+        bool isMax = Math.Abs(cur.Width - wa.Width) <= S(4) && Math.Abs(cur.Height - wa.Height) <= S(4);
+        if (isMax)
+        {
+            Size back = _mlRestoreSize;
+            if (back.Width < 80 || back.Height < 80) back = MlMinSize();
+            Size min = MlMinSize();
+            back = new Size(Math.Max(min.Width, Math.Min(back.Width, wa.Width)),
+                            Math.Max(min.Height, Math.Min(back.Height, wa.Height)));
+            mlPanel.Size = back;
+            mlPanel.Location = MlClampToScreen(new Point(mlPanel.Left, mlPanel.Top), back);
+        }
+        else
+        {
+            _mlRestoreSize = cur;
+            mlPanel.Bounds = wa;
+        }
+        MlLayout();
+        MlSavePos();
     }
 
     // 一键回到主窗中心：拖到天边找不回来了，点标题行右边的「回到主窗中心」
@@ -556,13 +636,68 @@ partial class QueryForm
         mlPanel = null;
     }
 
-    void MlLayout()
+    void MlLayout() { MlLayoutEnter(true); }
+
+    // 拖边缩放期间走这一条：只挪位置、不改字体、一个 MeasureText 都不跑。
+    // 不然每帧都量一遍按钮文字，内容会慢半拍、一格格跳出来。
+    void MlLayoutLite() { MlLayoutEnter(false); }
+
+    // 排版里改控件尺寸 → 会再抛 Resize → 又进排版。
+    // 加个重入闸：里层只记「还得再排一次」，等外层排完最多补一遍，绝不嵌套着往下钻。
+    bool _mlLaying, _mlLayAgain;
+    void MlLayoutEnter(bool full)
+    {
+        if (_mlLaying) { _mlLayAgain = true; return; }
+        _mlLaying = true;
+        try { MlLayoutCore(full); }
+        finally { _mlLaying = false; }
+        if (_mlLayAgain)
+        {
+            _mlLayAgain = false;
+            try { MlLayoutCore(true); } catch { }
+        }
+    }
+
+    void MlLayoutCore(bool full)
     {
         if (mlPanel == null || mlTitle == null) return;
         float textScale = Math.Min(uiScale, 1.35f);
-        mlTitle.Font = Cached(ref _fMlTitle, 12f * textScale, FontStyle.Bold);
-        Font fTxt = Cached(ref _fMlText, 9.5f * textScale, FontStyle.Regular);
-        Font fSmall = Cached(ref _fMlSmall, 8.5f * textScale, FontStyle.Regular);
+
+        Font fTxt, fSmall;
+        int homeW = 0, goW, copyW, txtW, docxW, chkW;
+        if (full || !_mlMeasured)
+        {
+            mlTitle.Font = Cached(ref _fMlTitle, 12f * textScale, FontStyle.Bold);
+            fTxt = Cached(ref _fMlText, 9.5f * textScale, FontStyle.Regular);
+            fSmall = Cached(ref _fMlSmall, 8.5f * textScale, FontStyle.Regular);
+            mlCloseBtn.Font = Cached(ref _fMlClose, 11f * textScale, FontStyle.Regular);
+            if (mlHomeLink != null)
+            {
+                mlHomeLink.Font = Cached(ref _fMlHome, 8.5f * textScale, FontStyle.Regular);
+                homeW = TextRenderer.MeasureText(mlHomeLink.Text, mlHomeLink.Font).Width + S(6);
+            }
+            mlCapSrc.Font = fSmall; mlCapDst.Font = fSmall; mlArrowLbl.Font = fSmall;
+            mlSrcBox.Font = fTxt; mlDstBox.Font = fTxt;
+            mlWithSrcChk.Font = fSmall;
+            mlTipLbl.Font = fSmall;
+            mlGoBtn.Font = fTxt; mlCopyBtn.Font = fTxt; mlTxtBtn.Font = fTxt; mlDocxBtn.Font = fTxt;
+            mlInBox.Box.Font = fTxt;
+            mlOutBox.Box.Font = fTxt;
+            goW = Math.Max(S(64), TextRenderer.MeasureText("翻译", fTxt).Width + S(28));
+            copyW = Math.Max(S(56), TextRenderer.MeasureText("复制", fTxt).Width + S(24));
+            txtW = Math.Max(S(76), TextRenderer.MeasureText("导出TXT", fTxt).Width + S(24));
+            docxW = Math.Max(S(84), TextRenderer.MeasureText("导出docx", fTxt).Width + S(24));
+            chkW = Math.Max(S(62), TextRenderer.MeasureText("带原文", fSmall).Width + S(22));
+            _mlHomeW = homeW; _mlGoW = goW; _mlCopyW = copyW; _mlTxtW = txtW; _mlDocxW = docxW; _mlChkW = chkW;
+            _mlMeasured = true;
+        }
+        else
+        {
+            // 字体和按钮宽度上一帧刚量过，缩放中直接拿来用
+            fTxt = mlInBox.Box.Font;
+            fSmall = mlTipLbl.Font;
+            homeW = _mlHomeW; goW = _mlGoW; copyW = _mlCopyW; txtW = _mlTxtW; docxW = _mlDocxW; chkW = _mlChkW;
+        }
 
         int w = mlPanel.ClientSize.Width, h = mlPanel.ClientSize.Height;
         if (w < 40 || h < 40) return;
@@ -570,14 +705,10 @@ partial class QueryForm
         int cw = Math.Max(S(20), fSmall.Height + S(8));
 
         mlHairY = S(42);
-        mlCloseBtn.Font = Cached(ref _fMlClose, 11f * textScale, FontStyle.Regular);
         mlCloseBtn.SetBounds(w - pad - cw + S(4), S(11), cw, cw);
         // 标题行右侧多一个「回到主窗中心」：拖远了、拖到副屏拔掉之后，靠它一键找回
-        int homeW = 0;
         if (mlHomeLink != null)
         {
-            mlHomeLink.Font = Cached(ref _fMlHome, 8.5f * textScale, FontStyle.Regular);
-            homeW = TextRenderer.MeasureText(mlHomeLink.Text, mlHomeLink.Font).Width + S(6);
             int homeH = Math.Max(S(14), mlHomeLink.Font.Height);
             mlHomeLink.SetBounds(Math.Max(pad + S(50), w - pad - cw + S(4) - S(8) - homeW), S(11) + (cw - homeH) / 2, homeW, homeH);
         }
@@ -590,13 +721,10 @@ partial class QueryForm
         int capH = Math.Max(S(13), fSmall.Height);
         int colGap = S(30);
         int colW = (w - pad * 2 - colGap) / 2;
-        mlCapSrc.Font = fSmall; mlCapDst.Font = fSmall; mlArrowLbl.Font = fSmall;
         mlCapSrc.SetBounds(pad + S(2), capY, colW, capH);
         mlCapDst.SetBounds(pad + colW + colGap + S(2), capY, w - pad - (pad + colW + colGap), capH);
         int comboY = capY + capH + S(2);
         int comboH = Math.Max(S(24), fTxt.Height + S(10));
-        mlSrcBox.Font = fTxt;
-        mlDstBox.Font = fTxt;
         mlSrcBox.SetBounds(pad, comboY, colW, comboH);
         int dstX = pad + colW + colGap;
         mlDstBox.SetBounds(dstX, comboY, Math.Max(S(60), w - pad - dstX), comboH);
@@ -618,15 +746,6 @@ partial class QueryForm
         //   第一行：状态文字 + 「带原文」勾选
         //   第二行：翻译 | 复制 | 导出TXT | 导出docx
         // 主界面底栏那 5 个按钮不在这里，一点都没动。
-        mlGoBtn.Font = fTxt;
-        mlCopyBtn.Font = fTxt;
-        mlTxtBtn.Font = fTxt;
-        mlDocxBtn.Font = fTxt;
-        int goW = Math.Max(S(64), TextRenderer.MeasureText("翻译", fTxt).Width + S(28));
-        int copyW = Math.Max(S(56), TextRenderer.MeasureText("复制", fTxt).Width + S(24));
-        int txtW = Math.Max(S(76), TextRenderer.MeasureText("导出TXT", fTxt).Width + S(24));
-        int docxW = Math.Max(S(84), TextRenderer.MeasureText("导出docx", fTxt).Width + S(24));
-        int chkW = Math.Max(S(62), TextRenderer.MeasureText("带原文", fSmall).Width + S(22));
         int gap = S(8);
 
         int row2Y = bottomY;
@@ -634,9 +753,7 @@ partial class QueryForm
         int row2H = btnH;
         if (row1Y < contentTop) row1Y = contentTop;     // 窗口被拖太矮时别压到输入框上
 
-        mlWithSrcChk.Font = fSmall;
         mlWithSrcChk.SetBounds(w - pad - chkW, row1Y, chkW, btnH);
-        mlTipLbl.Font = fSmall;
         mlTipLbl.SetBounds(pad, row1Y, Math.Max(S(60), w - pad * 2 - chkW - S(10)), btnH);
 
         // 右往左排：docx 最右，依次往左
@@ -655,8 +772,6 @@ partial class QueryForm
 
         int boxPad = S(7);
         mlInBox.PadPx = boxPad; mlOutBox.PadPx = boxPad;
-        mlInBox.Box.Font = fTxt;
-        mlOutBox.Box.Font = fTxt;
     }
 
     // ---------- 语言对记忆 ----------
@@ -1105,10 +1220,26 @@ class MlWindow : Form
     public Action EscPressed;               // 窗里有焦点时按 Esc → 收窗
     public Action DragEnded;                // 拖完松手 → 记位置
 
+    const int WM_GETMINMAXINFO = 0x0024;
     const int WM_NCHITTEST = 0x0084;
+    const int WM_NCLBUTTONDBLCLK = 0x00A3;
+    const int WM_ENTERSIZEMOVE = 0x0231;
     const int WM_EXITSIZEMOVE = 0x0232;
     const int HTCLIENT = 1;
     const int HTCAPTION = 2;
+    const int HTLEFT = 10;
+    const int HTRIGHT = 11;
+    const int HTTOP = 12;
+    const int HTTOPLEFT = 13;
+    const int HTTOPRIGHT = 14;
+    const int HTBOTTOM = 15;
+    const int HTBOTTOMLEFT = 16;
+    const int HTBOTTOMRIGHT = 17;
+
+    public int GripPx = 6;                  // 四边可拉区宽度（外面按 DPI 注入，别写死像素）
+    public bool Sizing;                     // 正在拖边缩放：期间只走轻量排版，一个 MeasureText 都不跑
+    public Action SizingStarted;            // 开始缩放：外面拿去打标记
+    public Action TitleDoubleClicked;       // 双击标题行 → 最大化 / 还原
 
     public MlWindow()
     {
@@ -1135,14 +1266,62 @@ class MlWindow : Form
         }
     }
 
+    // 拖动 / 缩放会把窗口重新激活，可编辑下拉框一旦被还回焦点就会把文字整段选中（蓝底）。
+    // 这里把面板里所有下拉框的选择清掉，光标位置保留，视觉上跟没碰过一样。
+    void MlClearComboSelection()
+    {
+        MlClearComboSelectionIn(this);
+    }
+
+    static void MlClearComboSelectionIn(Control host)
+    {
+        if (host == null) return;
+        foreach (Control c in host.Controls)
+        {
+            ComboBox cb = c as ComboBox;
+            if (cb != null) { try { cb.SelectionLength = 0; } catch { } }
+            else MlClearComboSelectionIn(c);   // 语言框可能嵌在白卡之类的容器里，往下找一层
+        }
+    }
+
     protected override void WndProc(ref Message m)
     {
+        if (m.Msg == WM_GETMINMAXINFO)
+        {
+            // 无边框窗口系统不替我们挡最小尺寸，拖急了能拉成一条线。
+            // MINMAXINFO 里 ptMinTrackSize 在偏移 24（前三个 POINT 各 8 字节），按偏移写，省一个结构体声明。
+            if (m.LParam != IntPtr.Zero)
+            {
+                System.Runtime.InteropServices.Marshal.WriteInt32(m.LParam, 24, Math.Max(1, MinimumSize.Width));
+                System.Runtime.InteropServices.Marshal.WriteInt32(m.LParam, 28, Math.Max(1, MinimumSize.Height));
+            }
+            base.WndProc(ref m);
+            return;
+        }
         if (m.Msg == WM_NCHITTEST)
         {
             int lp = m.LParam.ToInt32();
             int sx = (short)(lp & 0xFFFF);
             int sy = (short)((lp >> 16) & 0xFFFF);
             Point cp = PointToClient(new Point(sx, sy));
+            int W = ClientSize.Width, H = ClientSize.Height;
+            int g = Math.Max(3, GripPx);
+
+            // 四角和四边都要报命中码，否则只有标题行能拖、边框一根手指都拉不动。
+            // 角先报：先报边的话角上只会命中单边，斜着拉就废了。
+            bool onL = cp.X >= 0 && cp.X < g;
+            bool onR = cp.X <= W - 1 && cp.X >= W - g;
+            bool onT = cp.Y >= 0 && cp.Y < g;
+            bool onB = cp.Y <= H - 1 && cp.Y >= H - g;
+            if (onT && onL) { m.Result = (IntPtr)HTTOPLEFT; return; }
+            if (onT && onR) { m.Result = (IntPtr)HTTOPRIGHT; return; }
+            if (onB && onL) { m.Result = (IntPtr)HTBOTTOMLEFT; return; }
+            if (onB && onR) { m.Result = (IntPtr)HTBOTTOMRIGHT; return; }
+            if (onL) { m.Result = (IntPtr)HTLEFT; return; }
+            if (onR) { m.Result = (IntPtr)HTRIGHT; return; }
+            if (onB) { m.Result = (IntPtr)HTBOTTOM; return; }
+            if (onT) { m.Result = (IntPtr)HTTOP; return; }   // 顶部 strip 让出来做缩放，标题文字从 y=10 起，拖拽照旧
+
             if (cp.Y >= 0 && cp.Y < TitleHeight)
             {
                 // 标题行里只有「关闭」和「回到主窗中心」这两个可点控件照常响应，
@@ -1154,9 +1333,24 @@ class MlWindow : Form
             m.Result = (IntPtr)HTCLIENT;
             return;
         }
-        if (m.Msg == WM_EXITSIZEMOVE)
+        if (m.Msg == WM_NCLBUTTONDBLCLK && (int)m.WParam == HTCAPTION)
         {
+            // 双击标题行 = 铺满工作区 / 回到原尺寸，看长稿子不用再一行一行挪
+            if (TitleDoubleClicked != null) { try { TitleDoubleClicked(); } catch { } }
+            m.Result = IntPtr.Zero;
+            return;
+        }
+        if (m.Msg == WM_ENTERSIZEMOVE)
+        {
+            Sizing = true;
+            MlClearComboSelection();   // 一拖就把语言框里残留的全选清掉，不然看着两格发蓝
+            if (SizingStarted != null) { try { SizingStarted(); } catch { } }
+        }
+        else if (m.Msg == WM_EXITSIZEMOVE)
+        {
+            Sizing = false;
             DragExited = true;
+            MlClearComboSelection();   // 松手后系统会重新激活窗口，再清一次收尾
             if (DragEnded != null) { try { DragEnded(); } catch { } }
         }
         base.WndProc(ref m);

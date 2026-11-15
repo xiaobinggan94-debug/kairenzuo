@@ -1,5 +1,5 @@
 // ============================================================================
-//  翻译器 · Program.cs（Program）
+//  饼饼专属中英互译 · Program.cs（Program）
 //  程序入口与自检：Main()（含命令行参数分发）、界面自检、截图自检、控件树审计。
 //  Main 仍写在 QueryForm 分部类里，这样它调用静态成员不用加类名前缀，逻辑零改动。
 //  ---------------------------------------------------------------------------
@@ -26,13 +26,13 @@ using System.Web.Script.Serialization;
 using System.Windows.Forms;
 
 // ====== 程序集信息（v2.1 F1：以前 FileVersion 是 0.0.0.0，出问题分不清跑的是哪一版）======
-[assembly: System.Reflection.AssemblyTitle("翻译器")]
-[assembly: System.Reflection.AssemblyProduct("翻译器")]
+[assembly: System.Reflection.AssemblyTitle("饼饼专属中英互译")]
+[assembly: System.Reflection.AssemblyProduct("饼饼专属中英互译")]
 [assembly: System.Reflection.AssemblyCompany("Solivine")]
-[assembly: System.Reflection.AssemblyDescription("翻译器（速查助手）")]
+[assembly: System.Reflection.AssemblyDescription("饼饼专属中英互译（速查助手）")]
 [assembly: System.Reflection.AssemblyVersion("1.0.0.0")]
 [assembly: System.Reflection.AssemblyFileVersion("1.0.0.0")]
-[assembly: System.Reflection.AssemblyInformationalVersion("1.0.0")]
+[assembly: System.Reflection.AssemblyInformationalVersion("2.9.0")]
 
 partial class QueryForm : Form   // 基类只在这里声明一次，其余 5 个文件写字面上不带基类
 {
@@ -726,7 +726,7 @@ partial class QueryForm : Form   // 基类只在这里声明一次，其余 5 �
             fb.AppendLine();
 
             string shown = "";
-            string geoOut = "", geoOv = "";   // 排版几何：越界 / 文字块互压（本机锁屏时截屏是黑的，改用几何判定）
+            string geoOut = "", geoOv = "", geoBtnOv = "";   // 排版几何：越界 / 文字块互压 / 文字压按钮（本机锁屏时截屏是黑的，改用几何判定）
             try
             {
                 using (Form f = qf.BuildFirstRunForm())
@@ -756,18 +756,29 @@ partial class QueryForm : Form   // 基类只在这里声明一次，其余 5 �
                         (tbN.Text == QueryForm.APP_NAME_HINT || tbN.Text == QueryForm.AppTitle),
                         tbN == null ? "没有输入框" : "预填=" + tbN.Text);
                     List<Rectangle> lblBox = new List<Rectangle>();
+                    List<Rectangle> btnBox = new List<Rectangle>();
                     foreach (Control c in f.Controls)
                     {
                         if (c is Panel) continue;    // 分隔细线不算
                         if (c.Right > f.ClientSize.Width + 1 || c.Bottom > f.ClientSize.Height + 1)
                             geoOut += c.GetType().Name + "@" + c.Bounds + " ";
                         if (c is Label) lblBox.Add(c.Bounds);
+                        if (c is Button) btnBox.Add(c.Bounds);
                     }
                     for (int i = 0; i < lblBox.Count; i++)
                         for (int j = i + 1; j < lblBox.Count; j++)
                         {
                             Rectangle hit = Rectangle.Intersect(lblBox[i], lblBox[j]);
                             if (hit.Width > 2 && hit.Height > 2) geoOv += "[文字" + i + "×文字" + j + "] ";
+                        }
+                    // 文字块不许压到按钮上：Label 是不透明的白底，跟按钮一重叠就把按钮啃出一个直角缺口，
+                    // 自绘的圆角从缺口里消失，看着像「按钮缺了个扣子」（用户实拍报障就是这个）
+                    for (int i = 0; i < lblBox.Count; i++)
+                        for (int j = 0; j < btnBox.Count; j++)
+                        {
+                            Rectangle hit = Rectangle.Intersect(lblBox[i], btnBox[j]);
+                            if (hit.Width > 0 && hit.Height > 0)
+                                geoBtnOv += "[文字" + i + "×按钮" + j + " " + hit.Width + "×" + hit.Height + "] ";
                         }
                     SnapForm(f, fDir, "首启指路窗");
                 }
@@ -784,6 +795,7 @@ partial class QueryForm : Form   // 基类只在这里声明一次，其余 5 �
             chk("带了 exe 完整路径", shown.Contains("exe 路径"), "");
             chk("控件都没跑出窗口", geoOut.Length == 0, geoOut);
             chk("文字块不互相压住", geoOv.Length == 0, geoOv);
+            chk("文字块没压到按钮上（压了会啃掉按钮圆角）", geoBtnOv.Length == 0, geoBtnOv);
 
             // 快捷方式：只在自检目录里试，绝不往真实桌面丢文件
             string lnkDir = Path.Combine(fDir, "lnk_test");
@@ -1013,7 +1025,7 @@ partial class QueryForm : Form   // 基类只在这里声明一次，其余 5 �
                 using (Form f = qf.BuildApiKeyForm(true))
                 {
                     f.StartPosition = FormStartPosition.Manual;
-                    f.Location = new Point(700, 480);
+                    f.Location = new Point(700, 200);   // v2.9.0：窗变高了，往上挪才截得全
                     f.TopMost = true;
                     f.Show();
                     f.Activate();
@@ -1053,6 +1065,158 @@ partial class QueryForm : Form   // 基类只在这里声明一次，其余 5 �
             gchk("控件都没跑出窗口", geoOut.Length == 0, geoOut);
             gchk("文字块不互相压住", geoOv.Length == 0, geoOv);
             gchk("托盘菜单里有「配置 API Key」入口", qf.TrayMenuText().Contains("配置 API Key"), "");
+
+            // ===== v2.9.0：地址和模型名不再写死，能不能配成别家？=====
+            gb.AppendLine();
+            gb.AppendLine("-- v2.9.0 换服务商：地址 / 模型名可配 --");
+            gchk("窗里有「服务地址」输入框", shownKey.Contains("[服务地址输入]"), "");
+            gchk("窗里有「模型名」输入框", shownKey.Contains("[模型名输入]"), "");
+            gchk("窗里说明了留空就是 DeepSeek 官方", shownKey.Contains("留空"), "");
+            gchk("窗里点名了能用的几家", shownKey.Contains("Kimi") && shownKey.Contains("通义"), "");
+
+            gchk("什么都不填 = 原来的 DeepSeek 地址",
+                 QueryForm.ResolveApiBase("") == "https://api.deepseek.com/v1", QueryForm.ResolveApiBase(""));
+            gchk("什么都不填 = 原来的 deepseek-flash",
+                 QueryForm.ResolveApiModel("") == "deepseek-flash", QueryForm.ResolveApiModel(""));
+            gchk("没写协议自动补 https",
+                 QueryForm.ResolveApiBase("api.moonshot.cn/v1") == "https://api.moonshot.cn/v1",
+                 QueryForm.ResolveApiBase("api.moonshot.cn/v1"));
+            gchk("末尾多余的斜杠去掉",
+                 QueryForm.ResolveApiBase("https://open.bigmodel.cn/api/paas/v4/") == "https://open.bigmodel.cn/api/paas/v4",
+                 QueryForm.ResolveApiBase("https://open.bigmodel.cn/api/paas/v4/"));
+            gchk("整条接口地址粘进来不会拼成两遍",
+                 QueryForm.ResolveApiBase("https://api.deepseek.com/v1/chat/completions") == "https://api.deepseek.com/v1",
+                 QueryForm.ResolveApiBase("https://api.deepseek.com/v1/chat/completions"));
+            gchk("前后空格换行吃掉",
+                 QueryForm.ResolveApiBase("  https://openrouter.ai/api/v1 \r\n") == "https://openrouter.ai/api/v1",
+                 QueryForm.ResolveApiBase("  https://openrouter.ai/api/v1 \r\n"));
+            gchk("本机 http 地址不被强行升 https",
+                 QueryForm.ResolveApiBase("http://127.0.0.1:11434/v1") == "http://127.0.0.1:11434/v1",
+                 QueryForm.ResolveApiBase("http://127.0.0.1:11434/v1"));
+            gchk("模型名的引号空格洗掉",
+                 QueryForm.ResolveApiModel("  \"kimi-k2-0905-preview\" ") == "kimi-k2-0905-preview",
+                 QueryForm.ResolveApiModel("  \"kimi-k2-0905-preview\" "));
+            gchk("模型名内部的 / 和 : 一个不碰",
+                 QueryForm.ResolveApiModel("anthropic/claude-3.5:beta") == "anthropic/claude-3.5:beta",
+                 QueryForm.ResolveApiModel("anthropic/claude-3.5:beta"));
+
+            QueryForm.SetApiProviderQuiet("api.moonshot.cn/v1", "kimi-k2-0905-preview");
+            gchk("ini 里填了地址就真用它", QueryForm.ApiBaseNow() == "https://api.moonshot.cn/v1", QueryForm.ApiBaseNow());
+            gchk("ini 里填了模型就真用它", QueryForm.ApiModelNow() == "kimi-k2-0905-preview", QueryForm.ApiModelNow());
+            QueryForm.SetApiProviderQuiet("", "");
+            gchk("清空两项就退回 DeepSeek 官方",
+                 QueryForm.ApiBaseNow() == "https://api.deepseek.com/v1" && QueryForm.ApiModelNow() == "deepseek-flash",
+                 QueryForm.ApiBaseNow() + " / " + QueryForm.ApiModelNow());
+
+            gchk("Key 对但模型名不对时说的是人话",
+                 QueryForm.KeyVerdict(400, "{\"error\":{\"message\":\"model not exist\"}}").IndexOf("模型名") >= 0,
+                 QueryForm.KeyVerdict(400, "{\"error\":{\"message\":\"model not exist\"}}"));
+
+            // 真发一次：起个本地假服务器，看请求到底打到哪、带的是哪个模型名
+            // （只证明"地址和模型确实被用上了"，不会碰任何真实服务商）
+            {
+                int port = 18787;
+                int hitCount = 0;
+                string lastLine = "", lastBody = "";
+                System.Net.Sockets.TcpListener srv = null;
+                System.Threading.Thread th = null;
+                try
+                {
+                    srv = new System.Net.Sockets.TcpListener(System.Net.IPAddress.Loopback, port);
+                    srv.Start();
+                    th = new System.Threading.Thread(delegate()
+                    {
+                        for (int k = 0; k < 4; k++)
+                        {
+                            try
+                            {
+                                using (System.Net.Sockets.TcpClient c = srv.AcceptTcpClient())
+                                using (System.Net.Sockets.NetworkStream ns = c.GetStream())
+                                {
+                                    c.ReceiveTimeout = 8000;
+                                    System.Text.StringBuilder sb = new System.Text.StringBuilder();
+                                    byte[] buf = new byte[4096];
+                                    int n;
+                                    while ((n = ns.Read(buf, 0, buf.Length)) > 0)
+                                    {
+                                        sb.Append(System.Text.Encoding.UTF8.GetString(buf, 0, n));
+                                        string all = sb.ToString();
+                                        int he = all.IndexOf("\r\n\r\n");
+                                        if (he < 0) continue;
+                                        string head = all.Substring(0, he);
+                                        string[] lines = head.Split('\n');
+                                        lastLine = lines[0].Trim();
+                                        int cl = 0;
+                                        for (int i = 1; i < lines.Length; i++)
+                                        {
+                                            string ln = lines[i].Trim();
+                                            if (ln.ToLower().StartsWith("content-length:"))
+                                                int.TryParse(ln.Substring(15).Trim(), out cl);
+                                        }
+                                        lastBody = all.Substring(he + 4);
+                                        if (lastBody.Length >= cl) break;
+                                    }
+                                    hitCount++;
+                                    byte[] ok = System.Text.Encoding.UTF8.GetBytes("{\"choices\":[{\"message\":{\"content\":\"ok\"}}]}");
+                                    string respHead = "HTTP/1.1 200 OK\r\nContent-Type: application/json\r\nContent-Length: "
+                                                      + ok.Length + "\r\nConnection: close\r\n\r\n";
+                                    byte[] hb = System.Text.Encoding.ASCII.GetBytes(respHead);
+                                    ns.Write(hb, 0, hb.Length);
+                                    ns.Write(ok, 0, ok.Length);
+                                    ns.Flush();
+                                }
+                            }
+                            catch { break; }
+                        }
+                    });
+                    th.IsBackground = true;
+                    th.Start();
+
+                    // ① 自己直接发一次，出错要看得见原因
+                    string directErr = "";
+                    try
+                    {
+                        byte[] d = System.Text.Encoding.UTF8.GetBytes("{\"model\":\"fake-model-x\"}");
+                        System.Net.HttpWebRequest r2 = (System.Net.HttpWebRequest)System.Net.WebRequest.Create(
+                            "http://127.0.0.1:" + port + "/v1/chat/completions");
+                        r2.Method = "POST";
+                        r2.ContentType = "application/json";
+                        r2.ContentLength = d.Length;
+                        r2.Proxy = null;
+                        r2.Timeout = 6000;
+                        using (System.IO.Stream s = r2.GetRequestStream()) s.Write(d, 0, d.Length);
+                        using (System.Net.WebResponse rs = r2.GetResponse()) { rs.Close(); }
+                    }
+                    catch (Exception ex) { directErr = ex.GetType().Name + ": " + ex.Message; }
+                    gchk("本机能连上自己的假服务器", directErr.Length == 0, directErr);
+
+                    // ①.5 用程序自己那条出口再发一次，报错要摊开看
+                    string err3 = "";
+                    try
+                    {
+                        byte[] d3 = System.Text.Encoding.UTF8.GetBytes("{\"model\":\"fake-model-y\"}");
+                        System.Net.HttpWebRequest r3 = QueryForm.CreateJsonPost(
+                            "http://127.0.0.1:" + port + "/v1/chat/completions", "sk-test0000000000000000", d3);
+                        r3.Timeout = 6000;
+                        using (System.IO.Stream s = r3.GetRequestStream()) s.Write(d3, 0, d3.Length);
+                        using (System.Net.WebResponse rs = r3.GetResponse()) { rs.Close(); }
+                    }
+                    catch (Exception ex) { err3 = ex.GetType().Name + ": " + ex.Message; }
+                    gchk("程序那条出口也发得出去", err3.Length == 0, err3);
+
+                    // ② 再让程序走它自己那条路发
+                    string v = QueryForm.TestApiKeyOnline("sk-test0000000000000000",
+                                                          "http://127.0.0.1:" + port + "/v1", "fake-model-x");
+                    if (th != null) th.Join(6000);
+                    gchk("请求真的打到填进去的那个地址", hitCount >= 1 && lastLine.IndexOf("/v1/chat/completions") > 0,
+                         "hit=" + hitCount + " line=[" + lastLine + "]");
+                    gchk("请求里带的是填进去的那个模型名", lastBody.IndexOf("fake-model-x") >= 0,
+                         lastBody.Length > 120 ? lastBody.Substring(0, 120) : lastBody);
+                    gchk("对方回 200 时提示是「通了」", v.IndexOf("通了") >= 0, v + " ‖ " + QueryForm.LastTestError);
+                }
+                catch (Exception ex) { gchk("本地假服务器起得来", false, ex.GetType().Name + ": " + ex.Message); }
+                finally { try { if (srv != null) srv.Stop(); } catch { } }
+            }
 
             gb.AppendLine();
             gb.AppendLine("-- 洗 Key：粘进来的一坨文字能不能挑对 --");
@@ -1440,6 +1604,18 @@ partial class QueryForm : Form   // 基类只在这里声明一次，其余 5 �
             return;
         }
 
+        if (Array.IndexOf(Environment.GetCommandLineArgs(), "--mlsize") >= 0)
+        {
+            // 轻量自检：只验「其他语言小窗能不能自由拉大小、记不记得上次多大」。
+            // 全套 --mlcheck 跑几分钟，改一行窗口尺寸不用每次都等全套。
+            string[] za = Environment.GetCommandLineArgs();
+            int zi = Array.IndexOf(za, "--mlsize");
+            string zPath = "mlsize.txt";
+            if (zi >= 0 && zi + 1 < za.Length && !za[zi + 1].StartsWith("--")) zPath = za[zi + 1];
+            MlSizeCheck(zPath);
+            return;
+        }
+
         if (Array.IndexOf(Environment.GetCommandLineArgs(), "--mlcheck") >= 0)
         {
             // 自检：v2.3 第 2 步——其他语言小窗（结构 / 独立小窗行为 / 短路 / 缓存隔离 / 语言对记忆 / 主界面无回归）
@@ -1804,6 +1980,123 @@ partial class QueryForm : Form   // 基类只在这里声明一次，其余 5 �
     }
 
     // ========================================================================
+    //  v2.4 轻量自检：--mlsize <报告>
+    //
+    //  只查「其他语言小窗」的尺寸这一件事：
+    //    ① 窗不再是写死的 560×430，配置里存过大小就照存的来
+    //    ② 缩不没：有地板最小尺寸
+    //    ③ 拉得大：拉大后上下两个框跟着长，按钮不越界
+    //    ④ 记得住：松手落盘，关掉重开还是上次多大
+    //    ⑤ 双击标题行能铺满工作区，再双击回到拉多大就多大
+    // ========================================================================
+    static void MlSizeCheck(string outPath)
+    {
+        StringBuilder sb = new StringBuilder();
+        int pass = 0, fail = 0;
+        Action<string, bool, string> chk = delegate (string name, bool ok, string detail)
+        {
+            if (ok) pass++; else fail++;
+            sb.AppendLine((ok ? "  [通过] " : "  [失败] ") + name + (detail != null && detail.Length > 0 ? "  —— " + detail : ""));
+        };
+
+        QueryForm qf = null;
+        try
+        {
+            try { SetProcessDPIAware(); } catch { }
+            Application.EnableVisualStyles();
+            Application.SetCompatibleTextRenderingDefault(false);
+            QueryForm.selfTestMode = true;
+            LoadSettings();
+
+            qf = new QueryForm();
+            qf.Show();
+            MlPump(500);
+            qf.ShowMultilingual();
+            MlPump(600);
+
+            MlWindow mp = qf.MlPanelForTest;
+            chk("小窗打开", mp != null && mp.Visible, mp == null ? "未创建" : mp.Bounds.ToString());
+            if (mp != null)
+            {
+                // v2.8.9：拖动 / 缩放时窗口会被重新激活，可编辑下拉框默认把文字整段全选，两格就变蓝。
+                // 这里模拟「焦点回到语言框」「开始拖动」「松手」几个时机，确认选择长度始终是 0。
+                ComboBox cs = qf.MlSrcForTest, cd = qf.MlDstForTest;
+                if (cs != null && cd != null) {
+                    cs.Focus(); Application.DoEvents(); MlPump(120);
+                    chk("源语言框拿到焦点不整段选中", cs.SelectionLength == 0, "选中 " + cs.SelectionLength + " 字");
+                    cd.Focus(); Application.DoEvents(); MlPump(120);
+                    chk("目标语言框拿到焦点不整段选中", cd.SelectionLength == 0, "选中 " + cd.SelectionLength + " 字");
+                    SendMessage(mp.Handle, 0x0231, 0, 0);      // WM_ENTERSIZEMOVE：开始拖
+                    Application.DoEvents(); MlPump(150);
+                    chk("拖动一开始就把选择清干净", cs.SelectionLength == 0 && cd.SelectionLength == 0, cs.SelectionLength + " / " + cd.SelectionLength);
+                    SendMessage(mp.Handle, 0x0232, 0, 0);      // WM_EXITSIZEMOVE：松手
+                    Application.DoEvents(); MlPump(150);
+                    chk("拖动松手后依然没有整段选中", cs.SelectionLength == 0 && cd.SelectionLength == 0, cs.SelectionLength + " / " + cd.SelectionLength);
+                }
+                Size min = qf.MlMinSizeForTest;
+                chk("地板不再是大块头（能缩到 380×330 这一档）", min.Width <= 420 && min.Height <= 340, "最小 " + min);
+                chk("开窗尺寸来自记忆/默认，不是写死 560×430", qf.MlSavedSizeForTest.Width >= min.Width,
+                    "当前记忆 " + qf.MlSavedSizeForTest + "，实际开在 " + mp.Size);
+
+                mp.Size = new Size(60, 40);
+                MlPump(250);
+                chk("缩成一条缝会被地板挡住", mp.Width >= min.Width && mp.Height >= min.Height, "设 60×40 → 实际 " + mp.Size);
+
+                int out0 = qf.MlOutBoxHeightForTest, in0 = qf.MlInBoxHeightForTest;
+                mp.Size = new Size(940, 850);
+                MlPump(350);
+                chk("拉大后译文框跟着长高", qf.MlOutBoxHeightForTest > out0, out0 + " → " + qf.MlOutBoxHeightForTest);
+                chk("拉大后原文框跟着长高", qf.MlInBoxHeightForTest > in0, in0 + " → " + qf.MlInBoxHeightForTest);
+                chk("拉大后按钮没跑出窗口", qf.MlFootInsideForTest, "越界=" + !qf.MlFootInsideForTest);
+
+                SendMessage(mp.Handle, 0x0232, 0, 0);     // WM_EXITSIZEMOVE：松手
+                Application.DoEvents();
+                MlPump(200);
+                chk("松手把尺寸写进配置（ml_w / ml_h）",
+                    GetSet("ml_w", "?") == mp.Width.ToString() && GetSet("ml_h", "?") == mp.Height.ToString(),
+                    "ml_w=" + GetSet("ml_w", "?") + " ml_h=" + GetSet("ml_h", "?"));
+
+                int bw = mp.Width, bh = mp.Height;
+                qf.MlTestReopen();
+                MlPump(500);
+                chk("关掉重开还是上次多大",
+                    qf.MlPanelForTest != null && Math.Abs(qf.MlPanelForTest.Width - bw) <= 2 && Math.Abs(qf.MlPanelForTest.Height - bh) <= 2,
+                    "记的 " + bw + "×" + bh + "，重开 " + (qf.MlPanelForTest == null ? "null"
+                        : qf.MlPanelForTest.Width + "×" + qf.MlPanelForTest.Height));
+
+                MlWindow m2 = qf.MlPanelForTest;
+                if (m2 != null)
+                {
+                    Rectangle wa = Screen.FromRectangle(m2.Bounds).WorkingArea;
+                    MlPump(400);                    // 跨过双击防抖窗口
+                    qf.MlTestToggleMax();
+                    MlPump(350);
+                    chk("双击标题行铺满工作区", Math.Abs(m2.Width - wa.Width) <= 6 && Math.Abs(m2.Height - wa.Height) <= 6,
+                        "工作区 " + wa.Size + "，窗 " + m2.Size);
+                    MlPump(400);
+                    qf.MlTestToggleMax();
+                    MlPump(350);
+                    chk("再双击回到刚才拉的大小", Math.Abs(m2.Width - bw) <= 4 && Math.Abs(m2.Height - bh) <= 4,
+                        "该回 " + bw + "×" + bh + "，实际 " + m2.Size);
+                }
+            }
+        }
+        catch (Exception ex)
+        {
+            fail++;
+            sb.AppendLine("  [失败] 自检过程抛异常：" + ex.GetType().Name + " " + ex.Message);
+        }
+        finally
+        {
+            try { if (qf != null) { qf.HideMultilingual(); qf.Close(); } } catch { }
+        }
+
+        sb.AppendLine();
+        sb.AppendLine("合计：通过 " + pass + " / 失败 " + fail);
+        try { File.WriteAllText(outPath, sb.ToString(), new UTF8Encoding(true)); } catch { }
+    }
+
+    // ========================================================================
     //  v2.3 第 1 步自检：--mlcheck <报告> [--mlshot <目录>]
     //
     //  查六件事：
@@ -1991,6 +2284,54 @@ partial class QueryForm : Form   // 基类只在这里声明一次，其余 5 �
                 qf.MlTestOwnerRestore();
                 MlPump(250);
                 chk("主窗还原后小窗自己回来", mp.Visible, "可见=" + mp.Visible);
+
+                // ---- v2.4：小窗能自己拉大小（以前 560×430 写死，长句子只能挤在里头滚） ----
+                sb.AppendLine();
+                sb.AppendLine("四之二、小窗可自由缩放");
+                Size minSz = qf.MlMinSizeForTest;
+                mp.Size = new Size(60, 40);
+                MlPump(120);
+                chk("缩不成一条缝：被最小尺寸挡住", mp.Width >= minSz.Width && mp.Height >= minSz.Height,
+                    "设 60×40 → 实际 " + mp.Width + "×" + mp.Height + "，下限 " + minSz.Width + "×" + minSz.Height);
+
+                int outH0 = qf.MlOutBoxHeightForTest;
+                int inH0 = qf.MlInBoxHeightForTest;
+                mp.Size = new Size(900, 820);
+                MlPump(250);
+                chk("拉大后译文框跟着变高（不再固定在矮窗口里滚）", qf.MlOutBoxHeightForTest > outH0,
+                    "译文框高 " + outH0 + " → " + qf.MlOutBoxHeightForTest);
+                chk("拉大后原文框也跟着变高", qf.MlInBoxHeightForTest > inH0,
+                    "原文框高 " + inH0 + " → " + qf.MlInBoxHeightForTest);
+                chk("拉大后按钮和下拉都还在窗口里（排版跟上了）", qf.MlFootInsideForTest, "越界=" + !qf.MlFootInsideForTest);
+
+                // 松手才写盘：尺寸同样走 WM_EXITSIZEMOVE
+                SendMessage(mp.Handle, 0x0232, 0, 0);
+                Application.DoEvents();
+                chk("尺寸松手后记进配置（ml_w / ml_h）",
+                    GetSet("ml_w", "?") == mp.Width.ToString() && GetSet("ml_h", "?") == mp.Height.ToString(),
+                    "ml_w=" + GetSet("ml_w", "?") + " ml_h=" + GetSet("ml_h", "?") + " 期望 " + mp.Width + "×" + mp.Height);
+
+                int bigW = mp.Width, bigH = mp.Height;
+                qf.MlTestReopen();
+                MlPump(200);
+                chk("关掉重开还是上次拉的大小", qf.MlPanelForTest != null
+                        && Math.Abs(qf.MlPanelForTest.Width - bigW) <= 2 && Math.Abs(qf.MlPanelForTest.Height - bigH) <= 2,
+                    "记的是 " + bigW + "×" + bigH + "，重开是 " + (qf.MlPanelForTest == null ? "null" : qf.MlPanelForTest.Width + "×" + qf.MlPanelForTest.Height));
+
+                // 双击标题行：铺满工作区，再双击还原
+                mp = qf.MlPanelForTest;
+                if (mp != null)
+                {
+                    Rectangle waMl = Screen.FromRectangle(mp.Bounds).WorkingArea;
+                    qf.MlTestToggleMax();
+                    MlPump(320);      // 双击防抖是 250ms，这里得等过去
+                    chk("双击标题行铺满当前屏幕工作区", Math.Abs(mp.Width - waMl.Width) <= 4 && Math.Abs(mp.Height - waMl.Height) <= 4,
+                        "铺满后 " + mp.Width + "×" + mp.Height + "，工作区 " + waMl.Width + "×" + waMl.Height);
+                    qf.MlTestToggleMax();
+                    MlPump(200);
+                    chk("再双击还原回拉大前的档位", Math.Abs(mp.Width - bigW) <= 4 && Math.Abs(mp.Height - bigH) <= 4,
+                        "还原后 " + mp.Width + "×" + mp.Height + "，期望 " + bigW + "×" + bigH);
+                }
             }
 
             // ---------- ⑥ 主界面无回归（浮层开着的时候量） ----------

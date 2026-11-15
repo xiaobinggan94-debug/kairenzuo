@@ -1,4 +1,4 @@
-// 翻译器 · WordReview.cs（生词复习小窗）
+// 饼饼专属中英互译 · WordReview.cs（生词复习小窗）
 // 卡片式背单词：正面只给单词 + 音标，心里想过意思了按空格翻面，
 // 翻面后按 → 记住了 / ← 还得练。一轮默认 20 个，练完给一句小结。
 //
@@ -459,7 +459,7 @@ partial class QueryForm
 
         // ---------- 自检（只在 --audit 里跑）----------
         // 把一整轮从头点到尾：翻面 → 记住 → 翻面 → 还得练 …… 确认状态机不会错位、计数不打架。
-        // dryRun = true 保证一个字都不写进进度文件，自检不会污染真实的复习记录。
+        // dryRun = true 保证一个字都不写进进度文件，自检不会污染饼饼真实的复习记录。
         internal bool dryRun;
 
         internal void SelfTest(StringBuilder sb)

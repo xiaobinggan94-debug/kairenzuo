@@ -101,7 +101,9 @@ partial class QueryForm
             return b;
         }
 
-        void AddText(string text, int x, int y, int w, int h, float size, bool bold, Color color)
+        // 文字按可用宽度自己换行、高度量出来是多少就给多少；调用方用返回的 Bottom 接着往下排。
+        // 老写法固定高度（比如 h=22），句子一长尾巴就被切掉，用户看到的是"字没了"。
+        Label AddFlow(string text, int x, int y, int w, float size, bool bold, Color color)
         {
             Label lb = new Label();
             lb.Text = text;
@@ -109,9 +111,14 @@ partial class QueryForm
             lb.ForeColor = color;
             lb.AutoSize = false;
             lb.TextAlign = ContentAlignment.TopLeft;
+            lb.UseMnemonic = false;
             lb.Location = new Point(S(x), S(y));
-            lb.Size = new Size(S(w), S(h));
+            int wpx = S(w);
+            Size need = TextRenderer.MeasureText(text, lb.Font, new Size(wpx, 4000),
+                TextFormatFlags.WordBreak | TextFormatFlags.TextBoxControl | TextFormatFlags.NoPadding);
+            lb.Size = new Size(wpx, Math.Max(need.Height + S(4), S(18)));
             Controls.Add(lb);
+            return lb;
         }
 
         public FirstRunForm(string hotkeyLabel)
@@ -137,18 +144,22 @@ partial class QueryForm
             Font = new Font("Microsoft YaHei UI", 9.5f);
             ClientSize = new Size(S(460), S(414));
 
-            AddText("第一次用它，先给它起个名", 20, 14, 420, 26, 12.5f, true, Pal.Ink);
-            AddText("下面三件小事也说一次，以后再打开就不弹了。", 20, 42, 420, 20, 8.5f, false, Pal.InkMuted);
+            // 全窗改成"从上往下流"：每块文字量出真实高度，下一个控件接在它底下。
+            // 以前每个 y 都是写死的数字，哪句话长一点就顶到下一行、或者自己被切掉。
+            int y = 14;
+            y = AddFlow("第一次用它，先给它起个名", 20, y, 420, 12.5f, true, Pal.Ink).Bottom + S(6);
+            y = AddFlow("下面三件小事也说一次，以后再打开就不弹了。", 20, y, 420, 8.5f, false, Pal.InkMuted).Bottom + S(12);
 
             Panel hair1 = new Panel();
             hair1.BackColor = Pal.Hair;
-            hair1.Location = new Point(0, S(68));
+            hair1.Location = new Point(0, S(y));
             hair1.Size = new Size(S(460), S(1));
             Controls.Add(hair1);
+            y += S(1) + S(10);
 
             // ===== 起名：窗口标题、托盘提示、关于面板、导出文件头都跟着这个名字走 =====
             // 只在真正第一次打开时问一次；关掉这张卡就等于"用这个名字"，下次不再问
-            AddText("给它起个名（窗口标题和托盘上都显示这个）", 20, 78, 420, 20, 9.5f, true, Pal.Ink);
+            y = AddFlow("给它起个名（窗口标题和托盘上都显示这个）", 20, y, 420, 9.5f, true, Pal.Ink).Bottom + S(8);
             string seeded = CleanAppName(GetSet(APP_NAME_KEY, ""));
             // 预填：自己改过就用改过的；真正的第一次打开预填中性名；老用户从菜单进来预填当前名字
             if (seeded.Length == 0) seeded = FirstRunDone() ? AppTitle : APP_NAME_HINT;
@@ -159,28 +170,31 @@ partial class QueryForm
             tbName.BorderStyle = BorderStyle.FixedSingle;
             tbName.BackColor = Pal.Surface;
             tbName.ForeColor = Pal.Ink;
-            tbName.Location = new Point(S(20), S(102));
+            tbName.Location = new Point(S(20), S(y));
             tbName.Width = S(420);
             tbName.Tag = "软件名";
             Controls.Add(tbName);
-            AddText("最多 " + APP_NAME_MAX + " 个字；清空就还叫「" + APP_TITLE + "」。",
-                    20, 136, 420, 18, 8.5f, false, Pal.InkMuted);
+            y = tbName.Bottom + S(8);
+            y = AddFlow("最多 " + APP_NAME_MAX + " 个字；清空就还叫「" + APP_TITLE + "」。",
+                        20, y, 420, 8.5f, false, Pal.InkMuted).Bottom + S(12);
 
             Panel hair0 = new Panel();
             hair0.BackColor = Pal.Hair;
-            hair0.Location = new Point(0, S(158));
+            hair0.Location = new Point(0, S(y));
             hair0.Size = new Size(S(460), S(1));
             Controls.Add(hair0);
+            y += S(1) + S(11);
 
-            AddText("① 关掉小窗，它没退出", 20, 170, 420, 20, 9.5f, true, Pal.Ink);
-            AddText("它收在任务栏右下角（时钟旁边）的托盘里，小饼干图标。左键单击一下，小窗就回来。",
-                    20, 192, 420, 22, 8.8f, false, Pal.InkSecondary);
+            y = AddFlow("① 关掉小窗，它没退出", 20, y, 420, 9.5f, true, Pal.Ink).Bottom + S(6);
+            y = AddFlow("它收在任务栏右下角（时钟旁边）的托盘里，小饼干图标。左键单击一下，小窗就回来。",
+                        20, y, 420, 8.8f, false, Pal.InkSecondary).Bottom + S(12);
 
-            AddText("② 想在桌面留个图标", 20, 222, 260, 20, 9.5f, true, Pal.Ink);
-            AddText("点右边这个按钮，桌面就多一个能双击打开的。", 20, 244, 300, 20, 8.8f, false, Pal.InkSecondary);
-
+            y = AddFlow("② 想在桌面留个图标", 20, y, 260, 9.5f, true, Pal.Ink).Bottom + S(6);
+            // 宽度必须止步于按钮左边（按钮 x=300）：以前给到 300，右端整整 20px 压进按钮底下，
+            // Label 的白底把按钮左下角啃掉一个直角方块，看着就像"少了个圆角/缺了个扣子"。
+            Label lnkTip = AddFlow("点右边这个按钮，桌面就多一个能双击打开的。", 20, y, 268, 8.8f, false, Pal.InkSecondary);
             RoundButton btnLnk = MakeBtn("放个桌面快捷方式", 148, true);
-            btnLnk.Location = new Point(S(300), S(232));
+            btnLnk.Location = new Point(S(300), S(y));
             btnLnk.Click += delegate
             {
                 string err;
@@ -199,19 +213,22 @@ partial class QueryForm
                 }
             };
             Controls.Add(btnLnk);
+            btnLnk.BringToFront();   // z-order 保险：自绘按钮必须在最上层，任何标签都盖不到它身上
+            y = Math.Max(lnkTip.Bottom, btnLnk.Bottom) + S(14);
 
-            AddText("③ 哪天它突然不见了", 20, 278, 420, 20, 9.5f, true, Pal.Ink);
-            AddText("绿色 exe 加上「读你选中的文字」，很容易被杀毒软件误判成可疑文件、悄悄隔离掉。\r\n" +
-                    "真遇上：打开杀毒软件的「隔离区 / 恢复区」，把它恢复出来，再添加一次信任就好，不用重装。",
-                    20, 300, 420, 40, 8.8f, false, Pal.InkSecondary);
+            y = AddFlow("③ 哪天它突然不见了", 20, y, 420, 9.5f, true, Pal.Ink).Bottom + S(6);
+            y = AddFlow("绿色 exe 加上「读你选中的文字」，很容易被杀毒软件误判成可疑文件、悄悄隔离掉。\r\n" +
+                        "真遇上：打开杀毒软件的「隔离区 / 恢复区」，把它恢复出来，再添加一次信任就好，不用重装。",
+                        20, y, 420, 8.8f, false, Pal.InkSecondary).Bottom + S(12);
 
             Panel hair2 = new Panel();
             hair2.BackColor = Pal.Hair;
-            hair2.Location = new Point(0, S(344));
+            hair2.Location = new Point(0, S(y));
             hair2.Size = new Size(S(460), S(1));
             Controls.Add(hair2);
+            y += S(1) + S(11);
 
-            AddText("它装在这儿", 20, 356, 76, 20, 8.5f, false, Pal.InkMuted);
+            Label pathLbl = AddFlow("它装在这儿", 20, y, 76, 8.5f, false, Pal.InkMuted);
             TextBox tbPath = new TextBox();
             tbPath.Text = ExePath;
             tbPath.ReadOnly = true;
@@ -220,15 +237,20 @@ partial class QueryForm
             tbPath.ForeColor = Pal.InkSecondary;
             tbPath.Font = new Font("Microsoft YaHei UI", 8.5f);
             tbPath.ShortcutsEnabled = true;
-            tbPath.Location = new Point(S(98), S(359));
+            tbPath.Location = new Point(S(98), S(y + 2));
             tbPath.Width = S(340);
             tbPath.Tag = "exe路径";
             Controls.Add(tbPath);
+            y = Math.Max(pathLbl.Bottom, tbPath.Bottom) + S(14);
 
             RoundButton ok = MakeBtn("知道了", 80, false);
-            ok.Location = new Point(S(344), S(378));
+            ok.Location = new Point(S(344), S(y));
             ok.DialogResult = DialogResult.OK;
             Controls.Add(ok);
+            y = ok.Bottom + S(18);
+
+            // 窗高跟着内容算出来：文字换行多了，窗自己往下长，不会把底部按钮挤出画面
+            ClientSize = new Size(S(460), S(y));
 
             AcceptButton = ok;
             CancelButton = ok;

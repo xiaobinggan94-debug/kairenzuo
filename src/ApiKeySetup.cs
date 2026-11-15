@@ -69,6 +69,11 @@ partial class QueryForm
         if (status == 429) return "对方的服务器说「问得太频繁」，等一分钟再试";
         if (status >= 500) return "对方服务器忙（不是你的问题），过一会儿再试";
         if (status == 0) return "连不上网（先确认电脑能上网；挂着代理的话看是不是代理的事）";
+        // v2.9.0：换了服务商之后 400 十有八九是模型名不对（地址通了、Key 也认，就是没有这个模型）。
+        // 404 同理——地址少写一段或者多写一段，入口根本没落在 /v1 上。
+        if (status == 400 || status == 404
+            || b.IndexOf("model") >= 0 && (b.IndexOf("not exist") >= 0 || b.IndexOf("not found") >= 0 || b.IndexOf("invalid") >= 0))
+            return "地址通了，但模型名可能不对（填对方家的模型名再试一次）";
         return "没试成，对方返回 " + status;
     }
 
@@ -76,14 +81,31 @@ partial class QueryForm
     // 放在后台线程里跑，主窗不会僵住；最长等 15 秒。
     internal static string TestApiKeyOnline(string key)
     {
+        return TestApiKeyOnline(key, "", "");
+    }
+
+    // v2.9.0：测的必须是「窗里这一刻填的」地址和模型，而不是已经存好的那份。
+    // 不然刚填好别家地址点「测一下」，它还在拿 DeepSeek 的门口试，怎么都是 401。
+    // 两个 override 传空 = 用 ini 里存好的（再空就是 DeepSeek 官方那套）。
+    // v2.9.0：出网络异常时留一句原始原因（只给自检和日志看，界面上还是说人话）
+    internal static string LastTestError = "";
+
+    internal static string TestApiKeyOnline(string key, string baseOverride, string modelOverride)
+    {
+        LastTestError = "";
+        string apiBase = (baseOverride == null || baseOverride.Trim().Length == 0) ? API_BASE : ResolveApiBase(baseOverride);
+        string model = (modelOverride == null || modelOverride.Trim().Length == 0) ? MODEL : ResolveApiModel(modelOverride);
         try
         {
-            string body = "{\"model\":\"" + MODEL + "\","
+            string body = "{\"model\":\"" + model + "\","
                         + "\"messages\":[{\"role\":\"user\",\"content\":\"hi\"}],"
                         + "\"max_tokens\":1,\"stream\":false}";
             byte[] data = Encoding.UTF8.GetBytes(body);
-            HttpWebRequest req = CreateJsonPost(API_BASE + "/chat/completions", key, data);
+            HttpWebRequest req = CreateJsonPost(apiBase + "/chat/completions", key, data);
             req.Timeout = 15000;
+            // v2.9.0 修：以前这里只标了 ContentLength，却从来没把正文写出去，
+            // 结果「测一下」每次都抛 ProtocolViolationException，界面上显示成"连不上网"。
+            using (Stream up = req.GetRequestStream()) up.Write(data, 0, data.Length);
             using (HttpWebResponse resp = (HttpWebResponse)req.GetResponse())
             {
                 string txt = "";
@@ -103,9 +125,10 @@ partial class QueryForm
                 try { r.Close(); } catch { }
                 return KeyVerdict(code, txt);
             }
+            LastTestError = apiBase + " | " + wex.Message;
             return KeyVerdict(0, wex.Message);
         }
-        catch (Exception ex) { return KeyVerdict(0, ex.Message); }
+        catch (Exception ex) { LastTestError = apiBase + " | " + ex.GetType().Name + ": " + ex.Message; return KeyVerdict(0, ex.Message); }
     }
 
     // ====== 四、保存：先备份旧的，再写一行，写完立刻生效 ======
@@ -160,6 +183,8 @@ partial class QueryForm
     {
         float dpiScale = 1f;
         internal TextBox Box;
+        internal TextBox BoxBase;    // v2.9.0：服务地址（留空 = DeepSeek 官方）
+        internal TextBox BoxModel;   // v2.9.0：模型名（留空 = deepseek-flash）
         internal Label Status;
         RoundButton BtnTest;
         RoundButton BtnSave;
@@ -193,7 +218,7 @@ partial class QueryForm
             return b;
         }
 
-        void AddText(string text, int x, int y, int w, int h, float size, bool bold, Color color)
+        Label AddText(string text, int x, int y, int w, int h, float size, bool bold, Color color)
         {
             Label lb = new Label();
             lb.Text = text;
@@ -201,9 +226,33 @@ partial class QueryForm
             lb.ForeColor = color;
             lb.AutoSize = false;
             lb.TextAlign = ContentAlignment.TopLeft;
+            lb.UseMnemonic = false;
             lb.Location = new Point(S(x), S(y));
             lb.Size = new Size(S(w), S(h));
             Controls.Add(lb);
+            return lb;
+        }
+
+        // 说明文字一律走这个：按可用宽度自己换行，高度按真算出来的行数给。
+        // 老写法是固定 420×20 的单行 Label，句子一长尾巴就被切掉（"…不会写进任何代" 那种），
+        // 用户看到的就是"这字怎么没了"。
+        Label AddWrap(string text, int x, int y, int w, float size, bool bold, Color color)
+        {
+            Label lb = new Label();
+            lb.Text = text;
+            lb.Font = new Font("Microsoft YaHei UI", size, bold ? FontStyle.Bold : FontStyle.Regular);
+            lb.ForeColor = color;
+            lb.AutoSize = false;
+            lb.TextAlign = ContentAlignment.TopLeft;
+            lb.UseMnemonic = false;
+            lb.Location = new Point(S(x), S(y));
+            int wpx = S(w);
+            Size need = TextRenderer.MeasureText(text, lb.Font, new Size(wpx, 4000),
+                TextFormatFlags.WordBreak | TextFormatFlags.TextBoxControl | TextFormatFlags.NoPadding);
+            int hpx = Math.Max(need.Height + S(4), S(18));
+            lb.Size = new Size(wpx, hpx);
+            Controls.Add(lb);
+            return lb;
         }
 
         public ApiKeyForm(bool firstTime)
@@ -227,32 +276,86 @@ partial class QueryForm
             Font = new Font("Microsoft YaHei UI", 9.5f);
             ClientSize = new Size(S(460), S(272));
 
-            AddText(firstTime ? "先填一个 API Key，就能开始用了" : "换个 API Key", 20, 14, 420, 26, 12.5f, true, Pal.Ink);
-            AddText("填这一次就好，以后不用再管。", 20, 42, 420, 20, 8.5f, false, Pal.InkMuted);
+            // 从上往下流式排：每一块的高度都是量出来的，句子再长也只是把窗口往下撑，
+            // 不会再出现"字到这儿就被切掉"。底栏 y 由前面累计出来，不写死。
+            int y = 14;
+            Label t1 = AddWrap(firstTime ? "先填一个 API Key，就能开始用了" : "换个 API Key",
+                               20, y, 420, 12.5f, true, Pal.Ink);
+            y = t1.Bottom + S(4);
+            Label t2 = AddWrap("填这一次就好，以后不用再管。", 20, y, 420, 8.5f, false, Pal.InkMuted);
+            y = t2.Bottom + S(12);
 
             Panel hair1 = new Panel();
             hair1.BackColor = Pal.Hair;
-            hair1.Location = new Point(0, S(68));
+            hair1.Location = new Point(0, S(y));
             hair1.Size = new Size(S(460), S(1));
             Controls.Add(hair1);
+            y += S(1) + S(12);
 
-            AddText("它只存在你自己电脑上，用来让程序去问翻译；不会上传，也不会写进任何代码里。",
-                    20, 80, 420, 20, 8.8f, false, Pal.InkSecondary);
+            Label note = AddWrap("它只存在你自己电脑上，用来让程序去问翻译；不会上传，也不会写进任何代码里。",
+                                 20, y, 420, 8.8f, false, Pal.InkSecondary);
+            y = note.Bottom + S(14);
 
-            AddText("Key", 20, 112, 34, 22, 9.5f, false, Pal.InkSecondary);
+            Label lbKey = AddText("Key", 20, y + S(4), 34, 22, 9.5f, false, Pal.InkSecondary);
             Box = new TextBox();
             Box.Font = new Font("Consolas", 10f);
-            Box.Location = new Point(S(56), S(108));
+            Box.Location = new Point(S(56), S(y));
             Box.Width = S(384);
             Box.BorderStyle = BorderStyle.FixedSingle;
             Box.BackColor = Color.White;
             Box.ForeColor = Pal.Ink;
             Box.Tag = "apikey输入";
             Controls.Add(Box);
+            y = Box.Bottom + S(10);
 
-            AddText("形如 sk- 开头的一长串。粘完瞄一眼前后有没有多带的空格或换行，剩下的它自己会挑。",
-                    20, 138, 420, 20, 8.5f, false, Pal.InkMuted);
-            AddText("存在：" + ApiKeyFile, 20, 158, 420, 18, 8f, false, Pal.InkFaint);
+            Label hint = AddWrap("形如 sk- 开头的一长串。粘完瞄一眼前后有没有多带的空格或换行，剩下的它自己会挑。",
+                                 20, y, 420, 8.5f, false, Pal.InkMuted);
+            y = hint.Bottom + S(6);
+            // 路径可能很长，同样换行显示，不再腰斩成 "sqk_m..."
+            Label pathLb = AddWrap("存在：" + ApiKeyFile, 20, y, 420, 8f, false, Pal.InkFaint);
+            y = pathLb.Bottom + S(8);
+
+            // ---- v2.9.0 换服务商（可选）：留空 = DeepSeek 官方；不换的人这段当没看过 ----
+            Panel hairSvc = new Panel();
+            hairSvc.BackColor = Pal.Hair;
+            hairSvc.Location = new Point(0, S(y));
+            hairSvc.Size = new Size(S(460), S(1));
+            Controls.Add(hairSvc);
+            y += S(1) + S(12);
+
+            Label svcTip = AddWrap("想换别家？下面两个填上就行，留空还是 DeepSeek 官方那套。",
+                                   20, y, 420, 8.5f, false, Pal.InkMuted);
+            y = svcTip.Bottom + S(8);
+
+            Label lbBase = AddText("地址", 20, y + S(3), 34, 20, 8.8f, false, Pal.InkSecondary);
+            BoxBase = new TextBox();
+            BoxBase.Font = new Font("Consolas", 9.5f);
+            BoxBase.Location = new Point(S(56), S(y));
+            BoxBase.Width = S(384);
+            BoxBase.BorderStyle = BorderStyle.FixedSingle;
+            BoxBase.BackColor = Color.White;
+            BoxBase.ForeColor = Pal.Ink;
+            BoxBase.Tag = "服务地址输入";
+            BoxBase.Text = GetSet("api_base", "");
+            Controls.Add(BoxBase);
+            y = BoxBase.Bottom + S(6);
+
+            Label lbModel = AddText("模型", 20, y + S(3), 34, 20, 8.8f, false, Pal.InkSecondary);
+            BoxModel = new TextBox();
+            BoxModel.Font = new Font("Consolas", 9.5f);
+            BoxModel.Location = new Point(S(56), S(y));
+            BoxModel.Width = S(384);
+            BoxModel.BorderStyle = BorderStyle.FixedSingle;
+            BoxModel.BackColor = Color.White;
+            BoxModel.ForeColor = Pal.Ink;
+            BoxModel.Tag = "模型名输入";
+            BoxModel.Text = GetSet("api_model", "");
+            Controls.Add(BoxModel);
+            y = BoxModel.Bottom + S(6);
+
+            Label svcHint = AddWrap("Kimi / 通义 / 智谱 / 硅基流动 / OpenRouter 都行（Key 得是对应那家的）。改完先点「测一下」，通了再保存。",
+                                    20, y, 420, 8f, false, Pal.InkFaint);
+            y = svcHint.Bottom + S(8);
 
             Status = new Label();
             Status.Text = "";
@@ -260,19 +363,22 @@ partial class QueryForm
             Status.ForeColor = Pal.InkMuted;
             Status.AutoSize = false;
             Status.TextAlign = ContentAlignment.MiddleLeft;
-            Status.Location = new Point(S(20), S(180));
+            Status.Location = new Point(S(20), S(y));
             Status.Size = new Size(S(420), S(22));
             Status.Tag = "测试结果";
             Controls.Add(Status);
+            y = Status.Bottom + S(10);
 
             Panel hair2 = new Panel();
             hair2.BackColor = Pal.Hair;
-            hair2.Location = new Point(0, S(210));
+            hair2.Location = new Point(0, S(y));
             hair2.Size = new Size(S(460), S(1));
             Controls.Add(hair2);
+            y += S(1) + S(14);
 
+            int btnY = y;
             BtnTest = MakeBtn("测一下", 84, false);
-            BtnTest.Location = new Point(S(20), S(226));
+            BtnTest.Location = new Point(S(20), S(btnY));
             BtnTest.Click += delegate
             {
                 string k = CleanKeyText(Box.Text);
@@ -284,9 +390,12 @@ partial class QueryForm
                 }
                 BtnTest.Enabled = false;
                 Say("正在试…（最多等 15 秒）", false);
+                // v2.9.0：拿框里这一刻的地址/模型去试，不是存过的那份
+                string bTest = (BoxBase.Text ?? "").Trim();
+                string mTest = (BoxModel.Text ?? "").Trim();
                 Thread t = new Thread(delegate ()
                 {
-                    string v = TestApiKeyOnline(k);
+                    string v = TestApiKeyOnline(k, bTest, mTest);
                     try
                     {
                         BeginInvoke((MethodInvoker)delegate
@@ -304,12 +413,12 @@ partial class QueryForm
             Controls.Add(BtnTest);
 
             BtnLater = MakeBtn("先不配", 76, false);
-            BtnLater.Location = new Point(S(274), S(226));
+            BtnLater.Location = new Point(S(274), S(btnY));
             BtnLater.DialogResult = DialogResult.Cancel;
             Controls.Add(BtnLater);
 
             BtnSave = MakeBtn("保存", 80, true);
-            BtnSave.Location = new Point(S(360), S(226));
+            BtnSave.Location = new Point(S(360), S(btnY));
             BtnSave.Click += delegate
             {
                 string msg;
@@ -319,6 +428,13 @@ partial class QueryForm
                     Box.Focus();
                     return;
                 }
+                // v2.9.0：地址和模型一起存进 settings.ini。留空也照存（空就是恢复默认），
+                // 清了框点保存就等于退回 DeepSeek 官方，不用手改文件。
+                if (!selfTestMode)
+                {
+                    SetSet("api_base", (BoxBase.Text ?? "").Trim());
+                    SetSet("api_model", (BoxModel.Text ?? "").Trim());
+                }
                 SavedKey = CleanKeyText(Box.Text);
                 Saved = true;
                 Say("存好了，回到小窗点「查一下」就行", true);
@@ -326,6 +442,9 @@ partial class QueryForm
                 Close();
             };
             Controls.Add(BtnSave);
+
+            // 窗高跟着内容走：最后一行按钮的底 + 一圈留白。文字换行变多，窗自己往下长。
+            ClientSize = new Size(S(460), S(btnY) + S(30) + S(20));
 
             AcceptButton = BtnSave;
             CancelButton = BtnLater;

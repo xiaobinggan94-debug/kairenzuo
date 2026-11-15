@@ -17,4 +17,15 @@ Windows 桌面中英互译小工具。按 `Ctrl + 空格` 唤出小窗，输入�
 
 ## 许可
 
-[PolyForm Noncommercial License 1.0.0](LICENSE)：个人学习、自用、非营利场景随便用、随便改、随便分发；**任何商业用途都不允许**。
+[PolyForm Noncommercial License 1.0.0](LICENSE)（SPDX 标识：`PolyForm-Noncommercial-1.0.0`）
+
+**源码开放，但不是 OSI 定义的那种「开源」**——这一版许可禁止商业用途，所以严格说是 source-available。说人话就是：
+
+| 你想干什么 | 行不行 |
+|---|---|
+| 自己用、拆开改、拷给朋友 | 可以，不用问 |
+| 发到博客 / 论坛 / 群里，注明出处 | 可以 |
+| 拿去卖、做成付费服务、塞进商用产品、在公司里当生产工具跑 | 不行 |
+| 就想要商用授权 | 开个 Issue 找作者谈 |
+
+仓库页面右上角可能把这个许可显示成 `Other` / `NOASSERTION`，那是 GitHub 的自动识别库不认识 PolyForm，不是你没写许可——以本文件和 [LICENSE](LICENSE) 全文为准。

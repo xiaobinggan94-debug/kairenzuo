@@ -177,3 +177,20 @@ Write-Host ("文件 : {0}" -f $fi.FullName)
 Write-Host ("大小 : {0} 字节 ({1:N1} KB)" -f $fi.Length, ($fi.Length / 1KB))
 Write-Host ("SHA256: {0}" -f $hash)
 Write-Host "==========================================" -ForegroundColor Green
+
+# ---------- 6.5 同步 version.txt（不再靠人抄） ----------
+# version.txt 以前是编完以后手抄一遍 exe 的版本信息，所以永远慢半步：文档补了提交、
+# 没重新编译，它就停在旧编译时间 / 旧提交号上（1.0 首发后就发生过一次）。
+# 程序自带 --version <路径> 入口（Main 里最靠前的判断），让它自己写，
+# 写出来的编译时间取自 exe 自身写入时间、源码号取自嵌入资源 SrcRev，必然等于真 exe。
+$verPath = Join-Path $root "version.txt"
+try {
+    $vp = Start-Process -FilePath $outPath -ArgumentList '--version', $verPath -Wait -PassThru
+    if ($vp.ExitCode -eq 0 -and (Test-Path $verPath)) {
+        Write-Host ("version.txt: " + ((Get-Content $verPath -TotalCount 1) -join ''))
+    } else {
+        Write-Warning "version.txt 未更新（退出码 $($vp.ExitCode)），exe 本身不受影响"
+    }
+} catch {
+    Write-Warning ("version.txt 未更新: " + $_.Exception.Message)
+}

@@ -30,15 +30,15 @@ using System.Windows.Forms;
 [assembly: System.Reflection.AssemblyProduct("饼饼专属中英互译")]
 [assembly: System.Reflection.AssemblyCompany("Solivine")]
 [assembly: System.Reflection.AssemblyDescription("饼饼专属中英互译（速查助手）")]
-[assembly: System.Reflection.AssemblyVersion("1.0.0.0")]
-[assembly: System.Reflection.AssemblyFileVersion("1.0.0.0")]
-[assembly: System.Reflection.AssemblyInformationalVersion("1.0.0")]
+[assembly: System.Reflection.AssemblyVersion("1.0.1.0")]
+[assembly: System.Reflection.AssemblyFileVersion("1.0.1.0")]
+[assembly: System.Reflection.AssemblyInformationalVersion("1.0.1")]
 
 partial class QueryForm : Form   // 基类只在这里声明一次，其余 5 个文件写字面上不带基类
 {
     // ====== v2.1 F1：版本号与编译时间（日志首行打印，出问题一眼能对上）======
     // v2.5.4：之前一直忘了同步这个常量（"关于"窗里写 v2.5.2 就是这么来的），本轮补上。
-    public const string APP_VER = "1.0.0";
+    public const string APP_VER = "1.0.1";
 
     internal static string AppStamp()
     {

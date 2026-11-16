@@ -1076,8 +1076,8 @@ partial class QueryForm : Form   // 基类只在这里声明一次，其余 5 �
 
             gchk("什么都不填 = 原来的 DeepSeek 地址",
                  QueryForm.ResolveApiBase("") == "https://api.deepseek.com/v1", QueryForm.ResolveApiBase(""));
-            gchk("什么都不填 = 原来的 deepseek-flash",
-                 QueryForm.ResolveApiModel("") == "deepseek-flash", QueryForm.ResolveApiModel(""));
+            gchk("什么都不填 = 默认 deepseek-chat",
+                 QueryForm.ResolveApiModel("") == "deepseek-chat", QueryForm.ResolveApiModel(""));
             gchk("没写协议自动补 https",
                  QueryForm.ResolveApiBase("api.moonshot.cn/v1") == "https://api.moonshot.cn/v1",
                  QueryForm.ResolveApiBase("api.moonshot.cn/v1"));
@@ -1105,7 +1105,7 @@ partial class QueryForm : Form   // 基类只在这里声明一次，其余 5 �
             gchk("ini 里填了模型就真用它", QueryForm.ApiModelNow() == "kimi-k2-0905-preview", QueryForm.ApiModelNow());
             QueryForm.SetApiProviderQuiet("", "");
             gchk("清空两项就退回 DeepSeek 官方",
-                 QueryForm.ApiBaseNow() == "https://api.deepseek.com/v1" && QueryForm.ApiModelNow() == "deepseek-flash",
+                 QueryForm.ApiBaseNow() == "https://api.deepseek.com/v1" && QueryForm.ApiModelNow() == "deepseek-chat",
                  QueryForm.ApiBaseNow() + " / " + QueryForm.ApiModelNow());
 
             gchk("Key 对但模型名不对时说的是人话",

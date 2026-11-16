@@ -38,7 +38,11 @@ partial class QueryForm
     //  的调用点——它们一个字符都不用改。
     // ========================================================================
     const string DEFAULT_API_BASE = "https://api.deepseek.com/v1";
-    const string DEFAULT_MODEL = "deepseek-flash";
+    // ★ 2026-11-16 改：默认模型从 deepseek-flash 换成 deepseek-chat。
+    //   flash 是思考型模型，实测每次查询要先闷头想 3.5 秒才开始出正文
+    //   （首字 3656ms，思考 2351 字），中译英划词场景下体感就是「卡住不动」。
+    //   chat 实测首字 136ms，同一接口同一 Key，快 25 倍，且不再有「想完正文被截断」的失败。
+    const string DEFAULT_MODEL = "deepseek-chat";
 
     static string API_BASE { get { return ResolveApiBase(GetSet("api_base", "")); } }
     static string MODEL { get { return ResolveApiModel(GetSet("api_model", "")); } }

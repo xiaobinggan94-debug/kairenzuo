@@ -1268,9 +1268,11 @@ partial class QueryForm : Form   // 基类只在这里声明一次，其余 5 �
             string wrote1 = "";
             try { wrote1 = File.ReadAllText(tmpKey); } catch { }
             gchk("存得进去", ok1 && File.Exists(tmpKey), msg1);
-            gchk("只存了 key 本体（没带说明文字和空格）", wrote1.Trim() == "sk-abcdef0123456789", "文件内容 [" + wrote1.Replace("\r", "\\r").Replace("\n", "\\n") + "]");
+            // v1.0.0 第三条：文件里不该再出现明文 Key，断言换成「是密文」+「解密后同一串」。
+            gchk("落盘的是密文（文件里查不到明文 key）", KeyVault.LooksSealed(wrote1) && wrote1.IndexOf("sk-abcdef0123456789", StringComparison.Ordinal) < 0, "文件内容 [" + wrote1.Replace("\r", "\\r").Replace("\n", "\\n") + "]");
             gchk("文件末尾换行了（和手工建的一样）", wrote1.EndsWith("\r\n"), "");
-            gchk("读回来还是同一串", QueryForm.CleanKeyText(wrote1) == "sk-abcdef0123456789", "");
+            gchk("解密后读回来还是同一串", QueryForm.CleanKeyText(KeyVault.ReadKeyText(tmpKey, false)) == "sk-abcdef0123456789", "");
+            gchk("文件状态识别为「已加密」", KeyVault.Peek(tmpKey) == KeyVault.State.Sealed, KeyVault.Describe(tmpKey));
 
             try { File.Delete(tmpKey); } catch { }
             string msg2;
@@ -1284,9 +1286,27 @@ partial class QueryForm : Form   // 基类只在这里声明一次，其余 5 �
             int baks = 0;
             try { baks = Directory.GetFiles(gDir, "keytest_apikey.txt.bak_*").Length; } catch { }
             gchk("覆盖前留了备份", baks >= 1, "备份 " + baks + " 份");
+            // 备份里也不能是明文，否则新文件加了密、备份却在旁边裸着，等于白做
+            bool bakHasPlain = false;
+            try
+            {
+                foreach (string bp in Directory.GetFiles(gDir, "keytest_apikey.txt.bak_*"))
+                {
+                    string bt = File.ReadAllText(bp);
+                    if (!KeyVault.LooksSealed(bt)
+                        || bt.IndexOf("sk-oldkey0000000000000", StringComparison.Ordinal) >= 0
+                        || bt.IndexOf("sk-newkey0000000000000", StringComparison.Ordinal) >= 0) bakHasPlain = true;
+                }
+            }
+            catch { }
+            gchk("备份文件也是密文（查不到明文 key）", baks >= 1 && !bakHasPlain, "");
             string finalTxt = "";
             try { finalTxt = File.ReadAllText(tmpKey).Trim(); } catch { }
-            gchk("备份没影响新写进去的值", finalTxt == "sk-newkey0000000000000", finalTxt);
+            string finalPlain = KeyVault.Unseal(finalTxt);
+            gchk("备份没影响新写进去的值（解密后是新 key）", finalPlain == "sk-newkey0000000000000", finalPlain == null ? finalTxt : finalPlain);
+            // 换电脑 / 换 Windows 账户时解不开：必须当「还没配 Key」，不能崩、更不能拿密文去发请求
+            try { File.WriteAllText(tmpKey, KeyVault.SEAL_PREFIX + "!!!broken!!!" + "\r\n", new UTF8Encoding(false)); } catch { }
+            gchk("解不开的密文当「没配 Key」，不炸", KeyVault.ReadKeyText(tmpKey, false) == "" && KeyVault.Peek(tmpKey) == KeyVault.State.Broken, KeyVault.Describe(tmpKey));
             try { File.Delete(tmpKey); } catch { }
             try
             {

@@ -472,15 +472,28 @@ partial class QueryForm
             string keyPath = Path.Combine(LOG_DIR, "apikey.txt");
             if (File.Exists(keyPath))
             {
-                string k = "";
-                try { k = File.ReadAllText(keyPath, Encoding.UTF8).Trim(); } catch { }
+                // v1.0.0 第三条起盘上存的是密文，得先还原成真 key 再比。
+                // 拿密文前 8 位去比是白比——那 8 位就是公开前缀 "dpapi1:"，永远命中、永远误报。
+                string k = KeyVault.ReadKeyText(keyPath, false);
                 bool leaked = false;
+                string hint = "只比前 8 位，不打印 key 本身";
                 if (k.Length >= 8)
                 {
                     string head = k.Substring(0, 8);
                     leaked = report.IndexOf(head) >= 0 || MaskSecrets(k).IndexOf(head) >= 0;
                 }
-                A("真 key 不在报告里", !leaked, "只比前 8 位，不打印 key 本身");
+                else
+                {
+                    // 解不开（换了电脑 / 换了 Windows 账户）就退一步：密文本体也不许进报告
+                    hint = "本机 key 解不开，改验密文本体";
+                    string raw = "";
+                    try { raw = File.ReadAllText(keyPath, Encoding.UTF8).Trim(); } catch { }
+                    string body = raw.StartsWith(KeyVault.SEAL_PREFIX, StringComparison.Ordinal)
+                        ? raw.Substring(KeyVault.SEAL_PREFIX.Length).Trim()
+                        : raw;
+                    if (body.Length >= 8) leaked = report.IndexOf(body.Substring(0, 8), StringComparison.Ordinal) >= 0;
+                }
+                A("真 key 不在报告里", !leaked, hint);
             }
             else A("真 key 不在报告里", true, "本机还没配 key，跳过");
 

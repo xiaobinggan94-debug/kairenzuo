@@ -149,17 +149,31 @@ partial class QueryForm
             if (!string.IsNullOrEmpty(dir) && !Directory.Exists(dir)) Directory.CreateDirectory(dir);
             if (File.Exists(path))
             {
-                // 覆盖前留一份，万一原来的 Key 还能用、你手滑存错了，能翻回来
-                try { File.Copy(path, path + ".bak_" + DateTime.Now.ToString("yyyyMMdd_HHmmss"), true); } catch { }
+                // 覆盖前留一份，万一原来的 Key 还能用、你手滑存错了，能翻回来。
+                // 但备份里也不能出现明文：旧文件若是明文 Key，先加密再备份，
+                // 否则新文件加了密、旁边那个 .bak_xxx 却是明文，等于白干。
+                try
+                {
+                    string oldPlain = KeyVault.ReadKeyText(path, false).Trim();
+                    string bakPath = path + ".bak_" + DateTime.Now.ToString("yyyyMMdd_HHmmss");
+                    string sealedOld = oldPlain.Length > 0 ? KeyVault.Seal(oldPlain) : null;
+                    if (sealedOld != null) File.WriteAllText(bakPath, sealedOld + "\r\n", new UTF8Encoding(false));
+                    else File.Copy(path, bakPath, true);
+                }
+                catch { }
             }
-            File.WriteAllText(path, k + "\r\n", new UTF8Encoding(false));
+            // v1.0.0 第三条：先加密再落盘。Seal 返回 null 说明本机 DPAPI 用不了，
+            // 这种时候宁可退回明文也不能让你填完 Key 却用不了 —— 提示里会写明是明文。
+            string sealedText = KeyVault.Seal(k);
+            bool sealedOk = sealedText != null;
+            File.WriteAllText(path, (sealedOk ? sealedText : k) + "\r\n", new UTF8Encoding(false));
             // 清掉内存里的旧值：存完立刻生效，不用重启（只对真实那个文件做）
             if (string.Equals(Path.GetFullPath(path), Path.GetFullPath(ApiKeyFile), StringComparison.OrdinalIgnoreCase))
             {
                 apiKeyCache = null;
-                Log("API Key 已保存（长度 " + k.Length + "）");
+                Log("API Key 已保存（长度 " + k.Length + "，" + (sealedOk ? "已加密）" : "明文）"));
             }
-            msg = "存好了";
+            msg = sealedOk ? "存好了（已加密）" : "存好了（本机加密不可用，已按明文保存）";
             return true;
         }
         catch (Exception ex) { msg = "存不进去：" + ex.Message; return false; }

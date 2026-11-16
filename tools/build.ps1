@@ -95,7 +95,9 @@ if (-not (Test-Path $dictPath)) { Fail "离线词库不存在：$dictPath（⑮ 
 if (-not (Test-Path $releaseDir)) { New-Item -ItemType Directory -Path $releaseDir | Out-Null }
 
 # ---------- 3. 解析引用 ----------
-$refNames = @("System", "System.Core", "System.Drawing", "System.Windows.Forms", "System.Xml", "System.IO.Compression")
+# System.Security：v1.0.0 第三条加密 apikey.txt 用的 DPAPI（ProtectedData）在它里面，
+# 框架自带，不是第三方包。
+$refNames = @("System", "System.Core", "System.Drawing", "System.Windows.Forms", "System.Xml", "System.IO.Compression", "System.Security")
 $refPaths = @()
 foreach ($n in $refNames) {
     $p = Resolve-Reference $n $frameworkDir
@@ -184,6 +186,12 @@ Write-Host "==========================================" -ForegroundColor Green
 # 程序自带 --version <路径> 入口（Main 里最靠前的判断），让它自己写，
 # 写出来的编译时间取自 exe 自身写入时间、源码号取自嵌入资源 SrcRev，必然等于真 exe。
 $verPath = Join-Path $root "version.txt"
+# version.txt 只记录正式版（默认那个输出名）。编体验版/临时版不覆盖它，
+# 不然为了试一个改动跑一次编译，正式版的版本记录就被试验品顶掉了。
+$releaseName = [char]0x7FFB + [char]0x8BD1 + [char]0x5668 + ".exe"
+if ($OutputName -ne $releaseName) {
+    Write-Host ("version.txt: 本次输出是「{0}」，不是正式版，跳过同步" -f $OutputName)
+} else {
 try {
     $vp = Start-Process -FilePath $outPath -ArgumentList '--version', $verPath -Wait -PassThru
     if ($vp.ExitCode -eq 0 -and (Test-Path $verPath)) {
@@ -193,4 +201,5 @@ try {
     }
 } catch {
     Write-Warning ("version.txt 未更新: " + $_.Exception.Message)
+}
 }

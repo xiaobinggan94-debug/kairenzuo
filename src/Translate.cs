@@ -323,7 +323,10 @@ partial class QueryForm
                 if (!File.Exists(keyPath)) return apiKeyCache;
                 // v2.5.9 第一档①：清洗规则抽到 ApiKeySetup.cs 的 CleanKeyText，
                 // 和「填 Key 小窗」里保存、测试用的是同一套，避免「存进去了却读不出来」。
-                apiKeyCache = CleanKeyText(ReadTextAuto(keyPath));
+                // v1.0.0 第三条：文件现在是 DPAPI 加密的（升级前的老用户则是明文），
+                // 怎么读统一交给 KeyVault；读到旧明文会顺手升级成密文。
+                // 自检模式下禁止迁移——自检一个字节都不许动真实的 apikey.txt。
+                apiKeyCache = CleanKeyText(KeyVault.ReadKeyText(keyPath, !selfTestMode));
             }
             catch { apiKeyCache = ""; }
             return apiKeyCache;
